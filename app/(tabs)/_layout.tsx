@@ -1,17 +1,42 @@
 import { Tabs } from 'expo-router';
-import { Home, Dumbbell, Utensils, TrendingUp, User } from 'lucide-react-native';
+import { Home, Dumbbell, Utensils, TrendingUp, User, MoreVertical } from 'lucide-react-native';
+import { TouchableOpacity } from 'react-native';
+import { supabase } from '../../lib/supabase';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: false,
+        headerShown: true,
+        headerStyle: {
+          backgroundColor: '#08090C',
+          elevation: 0,
+          shadowOpacity: 0,
+          borderBottomWidth: 1,
+          borderBottomColor: '#1A1D24',
+        },
+        headerTintColor: '#FFFFFF',
+        headerTitleStyle: {
+          fontWeight: 'bold',
+          letterSpacing: 1,
+        },
+        headerRight: () => (
+          <TouchableOpacity 
+            style={{ marginRight: 16 }}
+            onPress={() => {
+              // Using a simple confirm for web compatibility, or you can just sign out directly
+              supabase.auth.signOut();
+            }}
+          >
+            <MoreVertical color="#9CA3AF" size={24} />
+          </TouchableOpacity>
+        ),
         tabBarStyle: {
           backgroundColor: '#12151B',
           borderTopWidth: 0,
           elevation: 0,
         },
-        tabBarActiveTintColor: '#A8FF3E',
+        tabBarActiveTintColor: '#ccff00',
         tabBarInactiveTintColor: '#9CA3AF',
       }}
     >
