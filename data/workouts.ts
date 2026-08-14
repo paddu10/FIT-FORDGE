@@ -181,9 +181,6 @@ export function getExercisesFor(
   );
 }
 
-/**
- * Count exercises for a given mode + category + bmi.
- */
 export function countExercisesFor(
   mode: WorkoutMode,
   category: MuscleCategory,
@@ -191,3 +188,53 @@ export function countExercisesFor(
 ): number {
   return getExercisesFor(mode, category, bmiCategory).length;
 }
+
+// ─────────────────────────────────────────────
+//  Phase 5 — Weekly Plan Engine
+// ─────────────────────────────────────────────
+
+export type DayPlan = {
+  day: number;          // 0 = Sunday … 6 = Saturday
+  dayName: string;
+  category: MuscleCategory | null;
+  isRestDay: boolean;
+  label: string;        // e.g. "Chest & Triceps"
+};
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+export function generateWeeklyPlan(goal: string, fitnessLevel: string): DayPlan[] {
+  type Split = Partial<Record<number, { category: MuscleCategory; label: string }>>;
+
+  const splits: Record<string, Split> = {
+    beginner: {
+      1: { category: 'chest',     label: 'Chest & Arms'     },
+      3: { category: 'legs',      label: 'Legs & Core'      },
+      5: { category: 'back',      label: 'Back & Shoulders' },
+    },
+    intermediate: {
+      1: { category: 'chest',     label: 'Chest & Triceps'  },
+      2: { category: 'back',      label: 'Back & Biceps'    },
+      4: { category: 'shoulders', label: 'Shoulders & Arms' },
+      5: { category: 'legs',      label: 'Legs & Glutes'    },
+    },
+    advanced: {
+      1: { category: 'chest',     label: 'Chest & Triceps'      },
+      2: { category: 'back',      label: 'Back & Biceps'        },
+      3: { category: 'legs',      label: 'Legs & Glutes'        },
+      4: { category: 'shoulders', label: 'Shoulders'            },
+      5: { category: 'arms',      label: 'Arms & Core'          },
+      6: { category: 'abs',       label: 'Core & Conditioning'  },
+    },
+  };
+
+  const split: Split = splits[fitnessLevel] ?? splits.beginner;
+
+  return Array.from({ length: 7 }, (_, day) => {
+    const entry = split[day];
+    return entry
+      ? { day, dayName: DAY_NAMES[day], category: entry.category, isRestDay: false, label: entry.label }
+      : { day, dayName: DAY_NAMES[day], category: null, isRestDay: true, label: 'Rest' };
+  });
+}
+

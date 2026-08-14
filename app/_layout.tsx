@@ -1,7 +1,11 @@
 import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { LogBox } from 'react-native';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+
+// Suppress the harmless third-party warning from react-native-gifted-charts on the Web
+LogBox.ignoreLogs(['Unknown event handler property `onPressOut`']);
 
 function RootLayoutNav() {
   const { session, isInitialized, onboardingCompleted } = useAuth();
@@ -38,6 +42,8 @@ function RootLayoutNav() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(onboarding)" />
         <Stack.Screen name="exercises/[category]" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="workout/session" options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="workout/complete" options={{ headerShown: false, presentation: 'modal', gestureEnabled: false }} />
       </Stack>
     </>
   );

@@ -32,7 +32,11 @@ export default function SignupScreen() {
     if (error) {
       setErrorMessage(error.message);
     } else {
-      if (data.session) {
+      if (data.session && data.user) {
+        // Save the name to the profiles table so it persists across logins
+        await supabase
+          .from('profiles')
+          .upsert({ id: data.user.id, name: fullName });
         // Automatically logged in, layout will redirect to tabs
       } else {
         setSuccessMessage('Account created! You can now sign in.');

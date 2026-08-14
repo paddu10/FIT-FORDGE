@@ -25,14 +25,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean>(false);
 
   const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('bmi')
-      .eq('id', userId)
-      .single();
-    
-    if (data) {
-      setOnboardingCompleted(!!data.bmi);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('calorie_target')
+        .eq('id', userId)
+        .single();
+      
+      if (error) {
+        if (error.code !== 'PGRST116') {
+          console.error('[AuthContext] fetchProfile error:', error.message);
+        }
+        // If no profile row exists at all, onboarding is definitely not complete
+        setOnboardingCompleted(false);
+        return;
+      }
+
+      if (data) {
+        const completed = data.calorie_target !== null && data.calorie_target !== undefined && Number(data.calorie_target) > 0;
+        console.log('[AuthContext] calorie_target =', data.calorie_target, '→ onboardingCompleted =', completed);
+        setOnboardingCompleted(completed);
+      } else {
+        setOnboardingCompleted(false);
+      }
+    } catch (err) {
+      console.error('[AuthContext] fetchProfile exception:', err);
+      setOnboardingCompleted(false);
     }
   };
 

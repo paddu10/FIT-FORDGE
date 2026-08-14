@@ -1,434 +1,352 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
-import { Plus, Check, MoreVertical, CheckCircle2 } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
+import {
+  View, Text, StyleSheet, SafeAreaView, ScrollView,
+  TouchableOpacity, ActivityIndicator,
+} from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { supabase } from '../../lib/supabase';
-import { generateDailyWorkout } from '../../lib/WorkoutEngine';
 import { useRouter } from 'expo-router';
-
-type SetData = {
-  id: string;
-  weight: string;
-  reps: string;
-  completed: boolean;
-};
-
-type Exercise = {
-  id: string; // daily_workout_exercise.id
-  name: string;
-  sets: SetData[];
-};
+import { supabase } from '../../lib/supabase';
+import {
+  generateWeeklyPlan, getExercisesFor, CATEGORY_META,
+  getBmiCategory, DayPlan, MuscleCategory, WorkoutMode, BmiCategory,
+} from '../../data/workouts';
+import { Flame, Moon, ChevronRight } from 'lucide-react-native';
 
 export default function WorkoutScreen() {
   const { user } = useAuth();
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
-  const [finishing, setFinishing] = useState(false);
-  const [dailyWorkoutId, setDailyWorkoutId] = useState<string | null>(null);
-  const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [workoutComplete, setWorkoutComplete] = useState(false);
+  const [weekPlan, setWeekPlan] = useState<DayPlan[]>([]);
+  const [todayPlan, setTodayPlan] = useState<DayPlan | null>(null);
+  const [workoutMode, setWorkoutMode] = useState<WorkoutMode>('home');
+  const [bmiCat, setBmiCat] = useState<BmiCategory>('normal');
+  const [previewExercises, setPreviewExercises] = useState<ReturnType<typeof getExercisesFor>>([]);
+  const [totalExercises, setTotalExercises] = useState(0);
 
   useEffect(() => {
-    async function loadWorkout() {
+    async function load() {
       if (!user) return;
-      setLoading(true);
+      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      if (data) {
+        // Determine mode from equipment
+        const hasGymEquipment =
+          Array.isArray(data.equipment) &&
+          data.equipment.length > 0 &&
+          !(data.equipment.length === 1 && data.equipment[0] === 'none');
+        const mode: WorkoutMode = hasGymEquipment ? 'gym' : 'home';
+        setWorkoutMode(mode);
 
-      try {
-        const workout = await generateDailyWorkout(user.id);
-        
-        if (!workout) {
-          // It's a rest day
-          setExercises([]);
-          setLoading(false);
-          return;
+        const bc: BmiCategory = data.bmi ? getBmiCategory(data.bmi) : 'normal';
+        setBmiCat(bc);
+
+        const plan = generateWeeklyPlan(data.goal || '', data.fitness_level || 'beginner');
+        setWeekPlan(plan);
+
+        const todayIdx = new Date().getDay();
+        const today = plan[todayIdx];
+        setTodayPlan(today);
+
+        if (!today.isRestDay && today.category) {
+          const exList = getExercisesFor(mode, today.category as MuscleCategory, bc);
+          setPreviewExercises(exList.slice(0, 3));
+          setTotalExercises(exList.length);
         }
-
-        setDailyWorkoutId(workout.id);
-        
-        if (workout.status === 'completed') {
-          setWorkoutComplete(true);
-          setLoading(false);
-          return;
-        }
-
-        // Fetch exercises for this workout
-        const { data: exData, error } = await supabase
-          .from('daily_workout_exercises')
-          .select(`
-            id,
-            sets,
-            reps,
-            exercises (
-              name
-            )
-          `)
-          .eq('daily_workout_id', workout.id)
-          .order('sort_order', { ascending: true });
-
-        if (error) throw error;
-
-        if (exData) {
-          const mapped: Exercise[] = exData.map(e => {
-            const numSets = e.sets || 3;
-            const setsArr: SetData[] = Array.from({ length: numSets }).map((_, i) => ({
-              id: `${e.id}-set-${i}`,
-              weight: '',
-              reps: e.reps?.toString() || '10',
-              completed: false
-            }));
-
-            return {
-              id: e.id,
-              name: (e.exercises as any)?.name || 'Unknown Exercise',
-              sets: setsArr
-            };
-          });
-          setExercises(mapped);
-        }
-
-      } catch (err) {
-        console.error(err);
-        Alert.alert('Error', 'Failed to load workout');
       }
-
       setLoading(false);
     }
-
-    loadWorkout();
+    load();
   }, [user]);
 
-  const updateSet = (exerciseId: string, setId: string, field: 'weight' | 'reps', value: string) => {
-    setExercises(exercises.map(ex => {
-      if (ex.id === exerciseId) {
-        return {
-          ...ex,
-          sets: ex.sets.map(s => s.id === setId ? { ...s, [field]: value } : s)
-        };
-      }
-      return ex;
-    }));
-  };
-
-  const toggleSetComplete = (exerciseId: string, setId: string) => {
-    setExercises(exercises.map(ex => {
-      if (ex.id === exerciseId) {
-        return {
-          ...ex,
-          sets: ex.sets.map(s => s.id === setId ? { ...s, completed: !s.completed } : s)
-        };
-      }
-      return ex;
-    }));
-  };
-
-  const handleFinishWorkout = async () => {
-    if (!dailyWorkoutId || !user) return;
-    setFinishing(true);
-
-    try {
-      // Mark daily workout as completed
-      await supabase
-        .from('daily_workouts')
-        .update({
-          status: 'completed',
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', dailyWorkoutId);
-
-      // Save sets completed
-      for (const ex of exercises) {
-        const completedSetsCount = ex.sets.filter(s => s.completed).length;
-        await supabase
-          .from('daily_workout_exercises')
-          .update({
-            completed_sets: completedSetsCount
-          })
-          .eq('id', ex.id);
-      }
-
-      // Also mark today's task as complete if it exists
-      const today = new Date().toISOString().split('T')[0];
-      await supabase
-        .from('daily_tasks')
-        .update({ completed: true, completed_at: new Date().toISOString() })
-        .eq('user_id', user.id)
-        .eq('date', today)
-        .eq('type', 'workout');
-
-      setWorkoutComplete(true);
-      
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
-    }
-    
-    setFinishing(false);
+  const startWorkout = () => {
+    if (!todayPlan?.category) return;
+    router.push(
+      `/workout/session?category=${todayPlan.category}&mode=${workoutMode}&bmiCat=${bmiCat}`
+    );
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, styles.centerContent]}>
+      <SafeAreaView style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color="#ccff00" />
       </SafeAreaView>
     );
   }
 
-  if (workoutComplete) {
-    return (
-      <SafeAreaView style={[styles.container, styles.centerContent]}>
-        <CheckCircle2 size={64} color="#ccff00" />
-        <Text style={styles.successTitle}>Workout Complete!</Text>
-        <Text style={styles.successSubtitle}>Great job today. Keep up the momentum.</Text>
-        <TouchableOpacity style={[styles.finishButton, { marginTop: 40, width: '80%' }]} onPress={() => router.push('/(tabs)')}>
-          <Text style={styles.finishButtonText}>BACK TO HOME</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
-
-  if (exercises.length === 0) {
-    return (
-      <SafeAreaView style={[styles.container, styles.centerContent]}>
-        <Text style={styles.successTitle}>Rest Day</Text>
-        <Text style={styles.successSubtitle}>Take time to recover today.</Text>
-      </SafeAreaView>
-    );
-  }
+  const todayMeta = todayPlan?.category ? CATEGORY_META[todayPlan.category as MuscleCategory] : null;
+  const todayIdx = new Date().getDay();
+  const dateStr = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', month: 'short', day: 'numeric',
+  });
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Today's Workout</Text>
-          <Text style={styles.headerSubtitle}>Personalized Plan</Text>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+
+        {/* ── Greeting header ── */}
+        <View style={styles.greeting}>
+          <Text style={styles.greetingTitle}>Today's Plan</Text>
+          <Text style={styles.greetingDate}>{dateStr}</Text>
         </View>
 
-        <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {exercises.map((exercise, index) => (
-            <View key={exercise.id} style={styles.exerciseCard}>
-              <View style={styles.exerciseHeader}>
-                <Text style={styles.exerciseNameText}>{exercise.name}</Text>
+        {/* ── Today card ── */}
+        {todayPlan?.isRestDay ? (
+          <View style={styles.restCard}>
+            <Moon size={44} color="#6C63FF" />
+            <Text style={styles.restTitle}>Rest Day</Text>
+            <Text style={styles.restSub}>
+              Recovery is part of the process.{'\n'}Sleep well, eat well, come back stronger.
+            </Text>
+          </View>
+        ) : (
+          <View style={[styles.todayCard, { borderColor: (todayMeta?.color ?? '#ccff00') + '50' }]}>
+            {/* Card header */}
+            <View style={styles.todayCardHeader}>
+              <Text style={styles.todayCardBigIcon}>{todayMeta?.icon}</Text>
+              <View style={{ flex: 1, marginLeft: 14 }}>
+                <Text style={styles.todayCardLabel}>{todayPlan?.label}</Text>
+                <Text style={styles.todayCardMeta}>
+                  {workoutMode === 'gym' ? '🏋️ Gym' : '🏠 Home'} · {totalExercises} exercises
+                </Text>
               </View>
+              <Flame size={22} color="#F59E0B" />
+            </View>
 
-              <View style={styles.tableHeader}>
-                <Text style={[styles.columnHeader, styles.colSet]}>SET</Text>
-                <Text style={[styles.columnHeader, styles.colWeight]}>LBS</Text>
-                <Text style={[styles.columnHeader, styles.colReps]}>REPS</Text>
-                <Text style={[styles.columnHeader, styles.colCheck]}></Text>
-              </View>
-
-              {exercise.sets.map((set, setIndex) => (
-                <View key={set.id} style={[styles.setRow, set.completed && styles.setRowCompleted]}>
-                  <View style={styles.colSet}>
-                    <Text style={styles.setNumberText}>{setIndex + 1}</Text>
-                  </View>
-                  <View style={styles.colWeight}>
-                    <TextInput
-                      style={styles.input}
-                      keyboardType="numeric"
-                      value={set.weight}
-                      onChangeText={(val) => updateSet(exercise.id, set.id, 'weight', val)}
-                      placeholder="-"
-                      placeholderTextColor="#64748B"
-                      editable={!set.completed}
-                    />
-                  </View>
-                  <View style={styles.colReps}>
-                    <TextInput
-                      style={styles.input}
-                      keyboardType="numeric"
-                      value={set.reps}
-                      onChangeText={(val) => updateSet(exercise.id, set.id, 'reps', val)}
-                      placeholder="-"
-                      placeholderTextColor="#64748B"
-                      editable={!set.completed}
-                    />
-                  </View>
-                  <View style={styles.colCheck}>
-                    <TouchableOpacity 
-                      style={[styles.checkButton, set.completed && styles.checkButtonActive]}
-                      onPress={() => toggleSetComplete(exercise.id, set.id)}
-                    >
-                      {set.completed ? <Check size={16} color="#000" /> : null}
-                    </TouchableOpacity>
-                  </View>
+            {/* Exercise preview rows */}
+            <View style={styles.previewList}>
+              {previewExercises.map((ex, i) => (
+                <View key={ex.id} style={styles.previewRow}>
+                  <Text style={styles.previewNum}>{String(i + 1).padStart(2, '0')}</Text>
+                  <Text style={styles.previewIcon}>{ex.icon}</Text>
+                  <Text style={styles.previewName} numberOfLines={1}>{ex.name}</Text>
+                  <Text style={styles.previewSets}>{ex.sets} × {ex.reps}</Text>
                 </View>
               ))}
+              {totalExercises > 3 && (
+                <Text style={styles.moreText}>+ {totalExercises - 3} more exercises</Text>
+              )}
             </View>
-          ))}
-          
-          <View style={{height: 100}} />
-        </ScrollView>
-      </KeyboardAvoidingView>
 
-      <View style={styles.footer}>
-        <TouchableOpacity 
-          style={[styles.finishButton, finishing && { opacity: 0.7 }]} 
-          onPress={handleFinishWorkout}
-          disabled={finishing}
-        >
-          <Text style={styles.finishButtonText}>{finishing ? 'FINISHING...' : 'FINISH WORKOUT'}</Text>
-        </TouchableOpacity>
-      </View>
+            {/* Start CTA */}
+            <TouchableOpacity
+              style={styles.startBtn}
+              onPress={startWorkout}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.startBtnText}>START WORKOUT 🔥</Text>
+              <ChevronRight size={20} color="#000" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── Weekly strip ── */}
+        <Text style={styles.sectionTitle}>THIS WEEK</Text>
+        <View style={styles.weekStrip}>
+          {weekPlan.map((dp) => {
+            const meta = dp.category ? CATEGORY_META[dp.category as MuscleCategory] : null;
+            const isToday = dp.day === todayIdx;
+            return (
+              <View
+                key={dp.day}
+                style={[
+                  styles.dayChip,
+                  isToday && styles.dayChipToday,
+                  dp.isRestDay && !isToday && styles.dayChipRest,
+                ]}
+              >
+                <Text style={[styles.dayChipName, isToday && styles.dayChipNameToday]}>
+                  {dp.dayName}
+                </Text>
+                <Text style={styles.dayChipIcon}>
+                  {dp.isRestDay ? '😴' : (meta?.icon ?? '💪')}
+                </Text>
+                {isToday && <View style={styles.todayDot} />}
+              </View>
+            );
+          })}
+        </View>
+
+        {/* ── Week plan detail ── */}
+        <Text style={styles.sectionTitle}>SCHEDULE</Text>
+        <View style={styles.scheduleCard}>
+          {weekPlan.map((dp, i) => {
+            const meta = dp.category ? CATEGORY_META[dp.category as MuscleCategory] : null;
+            const isToday = dp.day === todayIdx;
+            return (
+              <View key={dp.day}>
+                <View style={[styles.scheduleRow, isToday && styles.scheduleRowToday]}>
+                  <Text style={[styles.scheduleDayName, isToday && styles.scheduleDayToday]}>
+                    {dp.dayName}
+                  </Text>
+                  {dp.isRestDay ? (
+                    <View style={styles.scheduleRestBadge}>
+                      <Text style={styles.scheduleRestText}>Rest</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.scheduleWorkoutBadge}>
+                      <Text style={styles.scheduleWorkoutIcon}>{meta?.icon}</Text>
+                      <Text style={styles.scheduleWorkoutLabel}>{dp.label}</Text>
+                    </View>
+                  )}
+                  {isToday && <Text style={styles.todayTag}>TODAY</Text>}
+                </View>
+                {i < weekPlan.length - 1 && <View style={styles.scheduleDivider} />}
+              </View>
+            );
+          })}
+        </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#08090C',
-  },
-  centerContent: {
-    justifyContent: 'center',
+  container: { flex: 1, backgroundColor: '#08090C' },
+  center: { justifyContent: 'center', alignItems: 'center' },
+  scroll: { padding: 20, paddingBottom: 48 },
+
+  greeting: { marginBottom: 24, marginTop: 4 },
+  greetingTitle: { fontSize: 30, fontWeight: '900', color: '#FFFFFF' },
+  greetingDate: { fontSize: 14, color: '#6B7280', marginTop: 4 },
+
+  // Rest card
+  restCard: {
+    backgroundColor: '#161921',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#6C63FF40',
+    padding: 32,
     alignItems: 'center',
-    padding: 24,
+    gap: 14,
+    marginBottom: 28,
   },
-  keyboardView: {
-    flex: 1,
+  restTitle: { fontSize: 28, fontWeight: '900', color: '#FFFFFF' },
+  restSub: {
+    fontSize: 14, color: '#9CA3AF', textAlign: 'center', lineHeight: 22,
   },
-  header: {
+
+  // Today card
+  todayCard: {
+    backgroundColor: '#161921',
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
+    marginBottom: 28,
+    gap: 16,
+  },
+  todayCardHeader: { flexDirection: 'row', alignItems: 'center' },
+  todayCardBigIcon: { fontSize: 36 },
+  todayCardLabel: { fontSize: 20, fontWeight: '800', color: '#FFFFFF' },
+  todayCardMeta: { fontSize: 13, color: '#6B7280', marginTop: 3 },
+
+  previewList: { gap: 10 },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F1115',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    gap: 10,
+  },
+  previewNum: { color: '#4B5563', fontSize: 11, fontWeight: '900', width: 22 },
+  previewIcon: { fontSize: 18 },
+  previewName: { flex: 1, color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  previewSets: { color: '#6B7280', fontSize: 13, fontWeight: '600' },
+  moreText: { color: '#6B7280', fontSize: 13, textAlign: 'center', marginTop: 4 },
+
+  startBtn: {
+    backgroundColor: '#ccff00',
+    borderRadius: 12,
+    paddingVertical: 15,
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1A1D24',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
+  startBtnText: { color: '#000', fontWeight: '900', fontSize: 15, letterSpacing: 0.5 },
+
+  // Section title
+  sectionTitle: {
+    color: '#4B5563',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 12,
+    marginLeft: 2,
   },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#ccff00',
-    marginTop: 4,
-    fontWeight: '600',
+
+  // Weekly strip
+  weekStrip: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 28,
   },
-  successTitle: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    marginTop: 24,
-  },
-  successSubtitle: {
-    fontSize: 16,
-    color: '#9CA3AF',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  scrollContent: {
+  dayChip: {
     flex: 1,
-    padding: 16,
-  },
-  exerciseCard: {
+    alignItems: 'center',
     backgroundColor: '#161921',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#2D3748',
+    borderColor: '#1E2430',
+    gap: 4,
   },
-  exerciseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  exerciseNameText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ccff00',
-    flex: 1,
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    marginBottom: 8,
-    paddingHorizontal: 8,
-  },
-  columnHeader: {
-    color: '#64748B',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  colSet: {
-    width: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  colWeight: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  colReps: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  colCheck: {
-    width: 50,
-    alignItems: 'center',
-  },
-  setRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    backgroundColor: '#0F1115',
-    borderRadius: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  setRowCompleted: {
-    backgroundColor: 'rgba(204, 255, 0, 0.05)',
-  },
-  setNumberText: {
-    color: '#9CA3AF',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  input: {
-    backgroundColor: '#1A1D24',
-    borderRadius: 6,
-    color: '#FFFFFF',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    textAlign: 'center',
-    width: '80%',
-    fontWeight: '600',
-  },
-  checkButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: '#1A1D24',
-    borderWidth: 1,
-    borderColor: '#2D3748',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkButtonActive: {
-    backgroundColor: '#ccff00',
+  dayChipToday: {
+    backgroundColor: 'rgba(204,255,0,0.08)',
     borderColor: '#ccff00',
   },
-  footer: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#1A1D24',
-    backgroundColor: '#08090C',
+  dayChipRest: { opacity: 0.5 },
+  dayChipName: { color: '#6B7280', fontSize: 10, fontWeight: '700' },
+  dayChipNameToday: { color: '#ccff00' },
+  dayChipIcon: { fontSize: 16 },
+  todayDot: {
+    width: 5, height: 5, borderRadius: 3,
+    backgroundColor: '#ccff00', marginTop: 2,
   },
-  finishButton: {
-    backgroundColor: '#ccff00',
-    padding: 18,
-    borderRadius: 12,
+
+  // Schedule card
+  scheduleCard: {
+    backgroundColor: '#161921',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1E2430',
+    overflow: 'hidden',
+  },
+  scheduleRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    gap: 12,
   },
-  finishButtonText: {
-    color: '#000000',
-    fontWeight: '900',
-    fontSize: 16,
+  scheduleRowToday: { backgroundColor: 'rgba(204,255,0,0.04)' },
+  scheduleDayName: { color: '#9CA3AF', fontSize: 14, fontWeight: '600', width: 36 },
+  scheduleDayToday: { color: '#ccff00', fontWeight: '800' },
+  scheduleRestBadge: {
+    backgroundColor: '#1A1D24',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  scheduleRestText: { color: '#4B5563', fontSize: 12, fontWeight: '600' },
+  scheduleWorkoutBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  scheduleWorkoutIcon: { fontSize: 16 },
+  scheduleWorkoutLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  todayTag: {
+    color: '#ccff00',
+    fontSize: 10,
+    fontWeight: '800',
     letterSpacing: 1,
-  }
+    marginLeft: 'auto',
+  },
+  scheduleDivider: { height: 1, backgroundColor: '#1E2430', marginHorizontal: 18 },
 });

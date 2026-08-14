@@ -89,7 +89,11 @@ export default function ExerciseCategoryScreen() {
       {/* Start Workout Button */}
       {exercises.length > 0 && (
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.startBtn} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.startBtn}
+            activeOpacity={0.8}
+            onPress={() => router.push(`/workout/session?category=${cat}&mode=${workoutMode}&bmiCat=${bmiCategory}`)}
+          >
             <Text style={styles.startBtnText}>START WORKOUT 🔥</Text>
           </TouchableOpacity>
         </View>

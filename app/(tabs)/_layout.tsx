@@ -1,9 +1,11 @@
-import { Tabs } from 'expo-router';
-import { Home, Dumbbell, Utensils, TrendingUp, User, MoreVertical } from 'lucide-react-native';
-import { TouchableOpacity } from 'react-native';
+import { Tabs, useRouter } from 'expo-router';
+import { Home, Dumbbell, Utensils, TrendingUp, User, LogOut } from 'lucide-react-native';
+import { TouchableOpacity, Alert, Text, Platform } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 export default function TabLayout() {
+  const router = useRouter();
+  
   return (
     <Tabs
       screenOptions={{
@@ -21,14 +23,39 @@ export default function TabLayout() {
           letterSpacing: 1,
         },
         headerRight: () => (
-          <TouchableOpacity 
-            style={{ marginRight: 16 }}
+          <TouchableOpacity
+            style={{
+              marginRight: 16,
+              backgroundColor: 'rgba(239,68,68,0.1)',
+              borderWidth: 1,
+              borderColor: 'rgba(239,68,68,0.3)',
+              borderRadius: 8,
+              paddingHorizontal: 12,
+              paddingVertical: 7,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+            }}
             onPress={() => {
-              // Using a simple confirm for web compatibility, or you can just sign out directly
-              supabase.auth.signOut();
+              const doLogout = async () => {
+                await supabase.auth.signOut();
+                router.replace('/(auth)/login');
+              };
+
+              if (Platform.OS === 'web') {
+                if (window.confirm('Are you sure you want to log out?')) {
+                  doLogout();
+                }
+              } else {
+                Alert.alert('Log Out', 'Are you sure you want to log out?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Log Out', style: 'destructive', onPress: doLogout },
+                ]);
+              }
             }}
           >
-            <MoreVertical color="#9CA3AF" size={24} />
+            <LogOut color="#EF4444" size={14} />
+            <Text style={{ color: '#EF4444', fontSize: 13, fontWeight: '700' }}>Log Out</Text>
           </TouchableOpacity>
         ),
         tabBarStyle: {

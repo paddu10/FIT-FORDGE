@@ -24,6 +24,7 @@ export default function CompleteScreen() {
         .single();
         
       if (error || !profile) {
+        console.error('[Complete] Failed to load profile:', error?.message);
         setLoading(false);
         return;
       }
@@ -80,19 +81,6 @@ export default function CompleteScreen() {
       };
 
       setMetrics(calculatedMetrics);
-
-      // Save the calculated metrics to the profile
-      await supabase
-        .from('profiles')
-        .update({
-          bmr: calculatedMetrics.bmr,
-          tdee: calculatedMetrics.tdee,
-          calorie_target: calculatedMetrics.calorie_target,
-          protein_target: calculatedMetrics.protein_target,
-          bmi: calculatedMetrics.bmi
-        })
-        .eq('id', user.id);
-
       setLoading(false);
     }
 
@@ -100,12 +88,75 @@ export default function CompleteScreen() {
   }, [user]);
 
   const handleFinish = async () => {
-    setSaving(true);
+    if (!user || !metrics) return;
     
-    if (user) {
-      // BMI is already saved in the useEffect, which serves as our completion flag
+    setSaving(true);
+
+    try {
+      // Save the calculated metrics to the profile
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          bmr: metrics.bmr,
+          tdee: metrics.tdee,
+          calorie_target: metrics.calorie_target,
+          protein_target: metrics.protein_target,
+          bmi: metrics.bmi
+        })
+        .eq('id', user.id);
+
+      if (updateError) {
+        console.error('[Complete] Save failed:', updateError.message);
+        Alert.alert(
+          'Save Failed',
+          'Could not save your plan. Please check your connection and try again.\n\nError: ' + updateError.message
+        );
+        setSaving(false);
+        return;
+      }
+
+      // Verify the save actually worked by reading back
+      const { data: verifyData, error: verifyError } = await supabase
+        .from('profiles')
+        .select('calorie_target')
+        .eq('id', user.id)
+        .single();
+
+      if (verifyError || !verifyData?.calorie_target) {
+        console.error('[Complete] Save verification failed:', verifyError?.message, 'data:', verifyData);
+        
+        // Retry once with upsert approach
+        console.log('[Complete] Retrying save with upsert...');
+        const { error: retryError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: user.id,
+            bmr: metrics.bmr,
+            tdee: metrics.tdee,
+            calorie_target: metrics.calorie_target,
+            protein_target: metrics.protein_target,
+            bmi: metrics.bmi
+          });
+
+        if (retryError) {
+          console.error('[Complete] Retry also failed:', retryError.message);
+          Alert.alert(
+            'Save Failed',
+            'Could not save your plan after retrying. Please check your internet connection and try again.\n\nError: ' + retryError.message
+          );
+          setSaving(false);
+          return;
+        }
+      }
+
+      console.log('[Complete] Save verified successfully! calorie_target =', metrics.calorie_target);
+      
+      // Now refresh the AuthContext so it knows onboarding is complete
       await refreshProfile();
-      // Router automatically handles redirection to tabs
+      // The router in _layout.tsx will automatically redirect to (tabs)
+    } catch (err: any) {
+      console.error('[Complete] Unexpected error:', err);
+      Alert.alert('Error', 'Something went wrong. Please try again.');
     }
     
     setSaving(false);

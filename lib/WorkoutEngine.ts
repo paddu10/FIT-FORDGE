@@ -58,31 +58,34 @@ export async function generateDailyWorkout(userId: string) {
     }
 
     // Filter by difficulty if possible, or just fetch all and filter in JS
-    const { data: exercises, error: exercisesError } = await query;
-    
+    const { data: rawExercises, error: exercisesError } = await query;
+
+    let exercises: typeof rawExercises = rawExercises;
+
     if (exercisesError || !exercises || exercises.length === 0) {
       console.warn("No exercises found matching criteria. Fallback to any.");
       // Fallback: just get any exercises
       const { data: fallbackExercises } = await supabase.from('exercises').select('*').limit(5);
       if (!fallbackExercises) throw new Error('No exercises in DB');
-      exercises.push(...fallbackExercises);
+      exercises = fallbackExercises;
     }
 
     // Pick 4-6 exercises based on the target muscle group (simplified)
-    let selectedExercises = exercises;
+    let selectedExercises = exercises ?? [];
     if (targetMuscleGroup === 'Upper Body') {
-      selectedExercises = exercises.filter(e => ['Chest', 'Back', 'Shoulders', 'Arms'].includes(e.muscle_group)).slice(0, 5);
+      selectedExercises = (exercises ?? []).filter(e => ['Chest', 'Back', 'Shoulders', 'Arms'].includes(e.muscle_group)).slice(0, 5);
     } else if (targetMuscleGroup === 'Legs') {
-      selectedExercises = exercises.filter(e => e.muscle_group === 'Legs' || e.muscle_group === 'Glutes').slice(0, 5);
+      selectedExercises = (exercises ?? []).filter(e => e.muscle_group === 'Legs' || e.muscle_group === 'Glutes').slice(0, 5);
     } else if (targetMuscleGroup === 'Core') {
-      selectedExercises = exercises.filter(e => e.muscle_group === 'Core').slice(0, 5);
+      selectedExercises = (exercises ?? []).filter(e => e.muscle_group === 'Core').slice(0, 5);
     } else {
-      selectedExercises = exercises.slice(0, 5);
+      selectedExercises = (exercises ?? []).slice(0, 5);
     }
 
     if (selectedExercises.length === 0) {
-      selectedExercises = exercises.slice(0, 5); // ultimate fallback
+      selectedExercises = (exercises ?? []).slice(0, 5); // ultimate fallback
     }
+
 
     // 5. Create daily_workout record
     const { data: dailyWorkout, error: dwError } = await supabase

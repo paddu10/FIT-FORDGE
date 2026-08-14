@@ -225,7 +225,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#08090C' },
   center: { justifyContent: 'center', alignItems: 'center' },
-  scrollContent: { padding: 20, paddingBottom: 48 },
+  scrollContent: { padding: 20, paddingBottom: 100 },
   header: { alignItems: 'center', marginBottom: 28, marginTop: 8 },
   avatarCircle: {
     width: 80, height: 80, borderRadius: 40,
