@@ -6,14 +6,22 @@ import { useRouter } from 'expo-router';
 import { Calendar } from 'lucide-react-native';
 import { OnboardingFooter } from '../../components/OnboardingFooter';
 
-const DAYS = [1, 2, 3, 4, 5, 6, 7];
+const WEEKDAYS = [
+  { id: 1, label: 'MON' },
+  { id: 2, label: 'TUE' },
+  { id: 3, label: 'WED' },
+  { id: 4, label: 'THU' },
+  { id: 5, label: 'FRI' },
+  { id: 6, label: 'SAT' },
+  { id: 0, label: 'SUN' },
+];
 const DURATIONS = [15, 20, 30, 45, 60];
 
 export default function ScheduleScreen() {
   const { user } = useAuth();
   const router = useRouter();
 
-  const [trainingDays, setTrainingDays] = useState<number | null>(null);
+  const [trainingDaysPref, setTrainingDaysPref] = useState<number[]>([]);
   const [trainingDuration, setTrainingDuration] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -21,28 +29,51 @@ export default function ScheduleScreen() {
   useEffect(() => {
     async function loadSaved() {
       if (!user) return;
-      const { data } = await supabase.from('profiles').select('training_days, training_duration').eq('id', user.id).single();
-      if (data?.training_days) setTrainingDays(data.training_days);
+      const { data } = await supabase.from('profiles').select('training_days_pref, training_duration').eq('id', user.id).single();
+      if (data?.training_days_pref) setTrainingDaysPref(data.training_days_pref);
       if (data?.training_duration) setTrainingDuration(data.training_duration);
     }
     loadSaved();
   }, [user]);
 
+  const toggleDay = (dayId: number) => {
+    setTrainingDaysPref(prev => {
+      if (prev.includes(dayId)) {
+        return prev.filter(id => id !== dayId);
+      } else {
+        return [...prev, dayId];
+      }
+    });
+  };
+
   const handleNext = async () => {
-    if (!trainingDays || !trainingDuration) {
-      Alert.alert('Select Schedule', 'Please select both training frequency and duration.');
+    if (trainingDaysPref.length === 0 || !trainingDuration) {
+      Alert.alert('Select Schedule', 'Please select at least one training day and a duration.');
       return;
     }
-    if (!user) {
-      Alert.alert('Session Error', 'Not logged in. Please restart the app.');
+    if (trainingDaysPref.length === 7) {
+      Alert.alert('Consider Recovery', 'Training 7 days a week is intense. We recommend adding at least one recovery day.', [
+        { text: 'Change Schedule', style: 'cancel' },
+        { text: 'Keep 7 Days', onPress: saveAndContinue }
+      ]);
       return;
     }
+    saveAndContinue();
+  };
+
+  const saveAndContinue = async () => {
+    if (!user) return;
     setLoading(true);
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ training_days: trainingDays, training_duration: trainingDuration })
+        .update({ 
+          training_days_pref: trainingDaysPref, 
+          training_days: trainingDaysPref.length,
+          training_duration: trainingDuration 
+        })
         .eq('id', user.id);
+      
       if (error) {
         console.error('[Schedule] Save failed:', error.message);
         Alert.alert('Save Failed', 'Could not save your schedule. Please try again.');
@@ -64,21 +95,25 @@ export default function ScheduleScreen() {
         <View style={styles.header}>
           <Calendar size={32} color="#ccff00" />
           <Text style={styles.title}>Commit to yourself</Text>
-          <Text style={styles.subtitle}>How often and how long can you train?</Text>
+          <Text style={styles.subtitle}>Which days do you want to train?</Text>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Days per week</Text>
+          <Text style={styles.sectionTitle}>Training Days ({trainingDaysPref.length}/7)</Text>
           <View style={styles.daysGrid}>
-            {DAYS.map((day) => (
-              <TouchableOpacity
-                key={day}
-                style={[styles.dayButton, trainingDays === day && styles.activeButton]}
-                onPress={() => setTrainingDays(day)}
-              >
-                <Text style={[styles.buttonLabel, trainingDays === day && styles.activeLabel]}>{day}</Text>
-              </TouchableOpacity>
-            ))}
+            {WEEKDAYS.map((day) => {
+              const isActive = trainingDaysPref.includes(day.id);
+              return (
+                <TouchableOpacity
+                  key={day.id}
+                  style={[styles.dayButton, isActive && styles.activeButton]}
+                  onPress={() => toggleDay(day.id)}
+                >
+                  <Text style={[styles.buttonLabel, isActive && styles.activeLabel]}>{day.label}</Text>
+                  {isActive && <View style={styles.checkIcon}><Text style={{color: '#ccff00', fontSize: 10, fontWeight: 'bold'}}>✓</Text></View>}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -121,9 +156,20 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 15, color: '#9CA3AF', marginTop: 8, textAlign: 'center', lineHeight: 22 },
   section: { marginBottom: 32, backgroundColor: '#161921', padding: 24, borderRadius: 16, borderWidth: 1, borderColor: '#2D3748' },
   sectionTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
-  daysGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
-  dayButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#0F1115', borderWidth: 1, borderColor: '#1E2430', alignItems: 'center', justifyContent: 'center' },
-  buttonLabel: { color: '#64748B', fontSize: 18, fontWeight: '600' },
+  daysGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' },
+  dayButton: { 
+    width: '30%', 
+    height: 48, 
+    borderRadius: 8, 
+    backgroundColor: '#0F1115', 
+    borderWidth: 1, 
+    borderColor: '#1E2430', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  buttonLabel: { color: '#64748B', fontSize: 14, fontWeight: '600' },
+  checkIcon: { marginLeft: 6, marginTop: 1 },
   durationList: { gap: 8 },
   durationButton: { backgroundColor: '#0F1115', borderWidth: 1, borderColor: '#1E2430', paddingVertical: 14, borderRadius: 8, alignItems: 'center' },
   durationLabel: { color: '#64748B', fontSize: 16, fontWeight: '600' },

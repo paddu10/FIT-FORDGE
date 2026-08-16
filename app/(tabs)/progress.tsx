@@ -4,6 +4,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { LineChart } from 'react-native-gifted-charts';
 import { Trophy, TrendingUp, Scale, Ruler } from 'lucide-react-native';
+import { MetricCard } from '../../components/MetricCard';
+import { theme } from '../../constants/theme';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -12,6 +14,7 @@ export default function ProgressScreen() {
   const [loading, setLoading] = useState(true);
   const [measurements, setMeasurements] = useState<any[]>([]);
   const [achievements, setAchievements] = useState<any[]>([]);
+  const [prs, setPrs] = useState<any[]>([]);
 
   useEffect(() => {
     async function loadProgress() {
@@ -54,6 +57,16 @@ export default function ProgressScreen() {
           .eq('user_id', user.id);
         
         if (achData) setAchievements(achData);
+
+        // Fetch PRs
+        const { data: prData } = await supabase
+          .from('personal_records')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('achieved_at', { ascending: false })
+          .limit(5);
+
+        if (prData) setPrs(prData);
 
       } catch (e) {
         console.error(e);
@@ -133,31 +146,57 @@ export default function ProgressScreen() {
           </View>
           
           <View style={styles.measurementsGrid}>
-            <View style={styles.measurementCard}>
-              <Text style={styles.measurementLabel}>WEIGHT</Text>
-              <Text style={styles.measurementValue}>
-                {measurements.length > 0 ? measurements[measurements.length - 1].weight : '--'} <Text style={styles.measurementUnit}>lbs</Text>
-              </Text>
-            </View>
-            <View style={styles.measurementCard}>
-              <Text style={styles.measurementLabel}>WAIST</Text>
-              <Text style={styles.measurementValue}>
-                {measurements.length > 0 && measurements[measurements.length - 1].waist ? measurements[measurements.length - 1].waist : '--'} <Text style={styles.measurementUnit}>in</Text>
-              </Text>
-            </View>
-            <View style={styles.measurementCard}>
-              <Text style={styles.measurementLabel}>CHEST</Text>
-              <Text style={styles.measurementValue}>
-                {measurements.length > 0 && measurements[measurements.length - 1].chest ? measurements[measurements.length - 1].chest : '--'} <Text style={styles.measurementUnit}>in</Text>
-              </Text>
-            </View>
-            <View style={styles.measurementCard}>
-              <Text style={styles.measurementLabel}>ARMS</Text>
-              <Text style={styles.measurementValue}>
-                {measurements.length > 0 && measurements[measurements.length - 1].arms ? measurements[measurements.length - 1].arms : '--'} <Text style={styles.measurementUnit}>in</Text>
-              </Text>
-            </View>
+            <MetricCard 
+              label="WEIGHT"
+              value={measurements.length > 0 ? measurements[measurements.length - 1].weight : '--'}
+              unit="lbs"
+              style={{width: '48%'}}
+            />
+            <MetricCard 
+              label="WAIST"
+              value={measurements.length > 0 && measurements[measurements.length - 1].waist ? measurements[measurements.length - 1].waist : '--'}
+              unit="in"
+              style={{width: '48%'}}
+            />
+            <MetricCard 
+              label="CHEST"
+              value={measurements.length > 0 && measurements[measurements.length - 1].chest ? measurements[measurements.length - 1].chest : '--'}
+              unit="in"
+              style={{width: '48%'}}
+            />
+            <MetricCard 
+              label="ARMS"
+              value={measurements.length > 0 && measurements[measurements.length - 1].arms ? measurements[measurements.length - 1].arms : '--'}
+              unit="in"
+              style={{width: '48%'}}
+            />
           </View>
+        </View>
+
+        {/* PRs Section */}
+        <View style={styles.section}>
+          <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 16}}>
+            <Trophy color="#EF4444" size={24} style={{marginRight: 8}} />
+            <Text style={styles.sectionTitle}>PERSONAL RECORDS</Text>
+          </View>
+
+          {prs.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>Keep training to hit your first PR!</Text>
+            </View>
+          ) : (
+            prs.map((pr, idx) => (
+              <View key={idx} style={styles.achievementCard}>
+                <View style={[styles.achievementIconBg, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
+                  <Text style={styles.achievementIcon}>🔥</Text>
+                </View>
+                <View style={styles.achievementInfo}>
+                  <Text style={styles.achievementTitle}>{pr.exercise_name}</Text>
+                  <Text style={styles.achievementDesc}>{pr.record_value}</Text>
+                </View>
+              </View>
+            ))
+          )}
         </View>
 
         {/* Achievements Section */}

@@ -102,6 +102,20 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="edit-schedule"
+        options={{
+          href: null,
+          title: 'Edit Plan',
+        }}
+      />
+      <Tabs.Screen
+        name="training_days"
+        options={{
+          href: null,
+          title: 'Workout Days',
+        }}
+      />
     </Tabs>
   );
 }

@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Activity } from 'lucide-react-native';
+import { PremiumButton } from '../../components/PremiumButton';
 
 const { width, height } = Dimensions.get('window');
 const BMI_BG = require('../../assets/BMi background.webp');
@@ -248,20 +249,11 @@ export default function OnboardingScreen() {
               )}
 
               {/* CTA */}
-              <TouchableOpacity
-                style={[styles.btn, loading && { opacity: 0.7 }]}
+              <PremiumButton 
+                title={loading ? 'SAVING...' : 'NEXT ➔'}
                 onPress={handleNext}
-                disabled={loading}
-                activeOpacity={0.85}
-              >
-                <LinearGradient
-                  colors={['#d4ff00', '#99cc00']}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={styles.btnGrad}
-                >
-                  <Text style={styles.btnText}>{loading ? 'SAVING…' : 'NEXT  ➔'}</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+                loading={loading}
+              />
             </View>
 
             {/* ───── Footer ───── */}

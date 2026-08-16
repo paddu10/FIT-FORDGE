@@ -19,15 +19,19 @@ export default function EquipmentScreen() {
   const router = useRouter();
 
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
+  const [trainingLocation, setTrainingLocation] = useState<string>('home');
+  const [limitations, setLimitations] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Pre-populate from saved profile
   useEffect(() => {
     async function loadSaved() {
       if (!user) return;
-      const { data } = await supabase.from('profiles').select('equipment').eq('id', user.id).single();
-      if (data?.equipment && Array.isArray(data.equipment) && data.equipment.length > 0) {
-        setSelectedEquipment(data.equipment);
+      const { data } = await supabase.from('profiles').select('equipment, training_location, limitations').eq('id', user.id).single();
+      if (data) {
+        if (data.equipment && Array.isArray(data.equipment)) setSelectedEquipment(data.equipment);
+        if (data.training_location) setTrainingLocation(data.training_location);
+        if (data.limitations && Array.isArray(data.limitations)) setLimitations(data.limitations);
       }
     }
     loadSaved();
@@ -39,6 +43,14 @@ export default function EquipmentScreen() {
     if (next.includes(id)) next = next.filter((i) => i !== id);
     else next.push(id);
     setSelectedEquipment(next);
+  };
+
+  const toggleLimitation = (id: string) => {
+    if (id === 'none') { setLimitations(['none']); return; }
+    let next = limitations.filter((i) => i !== 'none');
+    if (next.includes(id)) next = next.filter((i) => i !== id);
+    else next.push(id);
+    setLimitations(next);
   };
 
   const handleNext = async () => {
@@ -54,7 +66,11 @@ export default function EquipmentScreen() {
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ equipment: selectedEquipment })
+        .update({ 
+          equipment: selectedEquipment,
+          training_location: trainingLocation,
+          limitations: limitations
+        })
         .eq('id', user.id);
       if (error) {
         console.error('[Equipment] Save failed:', error.message);
@@ -74,10 +90,28 @@ export default function EquipmentScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Training Location</Text>
+          <View style={styles.grid}>
+            {['Home', 'Gym', 'Both'].map((loc) => {
+              const id = loc.toLowerCase();
+              return (
+                <TouchableOpacity
+                  key={id}
+                  style={[styles.chip, trainingLocation === id && styles.chipActive]}
+                  onPress={() => setTrainingLocation(id)}
+                >
+                  <Text style={[styles.chipText, trainingLocation === id && styles.chipTextActive]}>{loc}</Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+        </View>
+
         <View style={styles.header}>
           <Dumbbell size={32} color="#ccff00" />
-          <Text style={styles.title}>What's available at home?</Text>
-          <Text style={styles.subtitle}>Select all that apply.</Text>
+          <Text style={styles.title}>What's available?</Text>
+          <Text style={styles.subtitle}>Select equipment available to you.</Text>
         </View>
 
         <View style={styles.list}>
@@ -101,6 +135,24 @@ export default function EquipmentScreen() {
               </TouchableOpacity>
             );
           })}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Physical Limitations</Text>
+          <View style={styles.grid}>
+            {['None', 'Wrist', 'Shoulder', 'Knee', 'Back', 'Other'].map((lim) => {
+              const id = lim.toLowerCase();
+              return (
+                <TouchableOpacity
+                  key={id}
+                  style={[styles.chip, limitations.includes(id) && styles.chipActive]}
+                  onPress={() => toggleLimitation(id)}
+                >
+                  <Text style={[styles.chipText, limitations.includes(id) && styles.chipTextActive]}>{lim}</Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
         </View>
 
         <TouchableOpacity
@@ -136,4 +188,11 @@ const styles = StyleSheet.create({
   button: { backgroundColor: '#ccff00', padding: 16, borderRadius: 8, alignItems: 'center', marginBottom: 8 },
   buttonDisabled: { opacity: 0.7 },
   buttonText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  section: { marginBottom: 32 },
+  sectionTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 12 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  chip: { backgroundColor: '#161921', borderWidth: 1, borderColor: '#2D3748', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 16 },
+  chipActive: { backgroundColor: 'rgba(204,255,0,0.05)', borderColor: '#ccff00' },
+  chipText: { color: '#9CA3AF', fontSize: 15, fontWeight: '600' },
+  chipTextActive: { color: '#ccff00' },
 });

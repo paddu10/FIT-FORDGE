@@ -1,68 +1,144 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView,
   TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { useRouter } from 'expo-router';
-import { supabase } from '../../lib/supabase';
-import {
-  generateWeeklyPlan, getExercisesFor, CATEGORY_META,
-  getBmiCategory, DayPlan, MuscleCategory, WorkoutMode, BmiCategory,
-} from '../../data/workouts';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Flame, Moon, ChevronRight } from 'lucide-react-native';
+import { getTodayWorkout, getWeekSchedule, getMissedWorkouts, DailyWorkoutWithDetails } from '../../lib/WorkoutService';
+import { rescheduleMissedWorkout } from '../../lib/WorkoutEngine';
+
+function getCategoryMeta(name: string | null | undefined) {
+  const defaultMeta = { label: name || 'Custom Workout', icon: '💪', color: '#ccff00' };
+  if (!name) return defaultMeta;
+  
+  const lower = name.toLowerCase();
+  if (lower.includes('upper')) return { label: name, icon: '🏋️', color: '#4ECDC4' };
+  if (lower.includes('lower')) return { label: name, icon: '🦵', color: '#DDA0DD' };
+  if (lower.includes('full')) return { label: name, icon: '🔥', color: '#FF6B35' };
+  if (lower.includes('chest')) return { label: name, icon: '🏋️', color: '#4ECDC4' };
+  if (lower.includes('back')) return { label: name, icon: '🦅', color: '#45B7D1' };
+  if (lower.includes('shoulder')) return { label: name, icon: '💪', color: '#96CEB4' };
+  if (lower.includes('leg')) return { label: name, icon: '🦵', color: '#DDA0DD' };
+  if (lower.includes('arm')) return { label: name, icon: '💥', color: '#FFD93D' };
+  if (lower.includes('core') || lower.includes('abs')) return { label: name, icon: '🔥', color: '#FF6B35' };
+  return defaultMeta;
+}
+
+function toLocalDateStr(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')
+  ].join('-');
+}
 
 export default function WorkoutScreen() {
   const { user } = useAuth();
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
-  const [weekPlan, setWeekPlan] = useState<DayPlan[]>([]);
-  const [todayPlan, setTodayPlan] = useState<DayPlan | null>(null);
-  const [workoutMode, setWorkoutMode] = useState<WorkoutMode>('home');
-  const [bmiCat, setBmiCat] = useState<BmiCategory>('normal');
-  const [previewExercises, setPreviewExercises] = useState<ReturnType<typeof getExercisesFor>>([]);
-  const [totalExercises, setTotalExercises] = useState(0);
+  const [weekPlan, setWeekPlan] = useState<DailyWorkoutWithDetails[]>([]);
+  const [todayPlan, setTodayPlan] = useState<DailyWorkoutWithDetails | null>(null);
+  const [missedWorkout, setMissedWorkout] = useState<DailyWorkoutWithDetails | null>(null);
+  const [rescheduling, setRescheduling] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      if (!user) return;
-      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      if (data) {
-        // Determine mode from equipment
-        const hasGymEquipment =
-          Array.isArray(data.equipment) &&
-          data.equipment.length > 0 &&
-          !(data.equipment.length === 1 && data.equipment[0] === 'none');
-        const mode: WorkoutMode = hasGymEquipment ? 'gym' : 'home';
-        setWorkoutMode(mode);
+  useFocusEffect(
+    useCallback(() => {
+      async function load() {
+        if (!user) return;
+        setLoading(true);
 
-        const bc: BmiCategory = data.bmi ? getBmiCategory(data.bmi) : 'normal';
-        setBmiCat(bc);
+        const today = new Date();
+        const todayStr = toLocalDateStr(today);
+        
+        // Find Monday of the current week
+        const dayOfWeek = today.getDay() === 0 ? 6 : today.getDay() - 1;
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - dayOfWeek);
+        const startOfWeekStr = toLocalDateStr(monday);
 
-        const plan = generateWeeklyPlan(data.goal || '', data.fitness_level || 'beginner');
-        setWeekPlan(plan);
+        const [todayWorkout, weekWorkouts, missed] = await Promise.all([
+          getTodayWorkout(user.id, todayStr),
+          getWeekSchedule(user.id, startOfWeekStr),
+          getMissedWorkouts(user.id, todayStr)
+        ]);
 
-        const todayIdx = new Date().getDay();
-        const today = plan[todayIdx];
-        setTodayPlan(today);
-
-        if (!today.isRestDay && today.category) {
-          const exList = getExercisesFor(mode, today.category as MuscleCategory, bc);
-          setPreviewExercises(exList.slice(0, 3));
-          setTotalExercises(exList.length);
+        setTodayPlan(todayWorkout);
+        if (missed.length > 0) {
+          setMissedWorkout(missed[0]); // Grab the most recent missed workout
+        } else {
+          setMissedWorkout(null);
         }
+        
+        // Pad the week array if missing days
+        const paddedWeek = Array.from({ length: 7 }).map((_, i) => {
+          const d = new Date(monday);
+          d.setDate(monday.getDate() + i);
+          const dStr = toLocalDateStr(d);
+          const existing = weekWorkouts.find(w => w.scheduled_date === dStr);
+          return existing || {
+            id: 'dummy-' + i,
+            scheduled_date: dStr,
+            status: 'pending',
+            is_rest_day: true,
+            actual_duration_minutes: null,
+            workouts: null,
+            daily_workout_exercises: []
+          };
+        });
+        
+        setWeekPlan(paddedWeek as DailyWorkoutWithDetails[]);
+        setLoading(false);
       }
-      setLoading(false);
-    }
-    load();
-  }, [user]);
+      load();
+    }, [user])
+  );
 
   const startWorkout = () => {
-    if (!todayPlan?.category) return;
-    router.push(
-      `/workout/session?category=${todayPlan.category}&mode=${workoutMode}&bmiCat=${bmiCat}`
-    );
+    // Navigate to session with the daily_workout ID instead of generic category
+    if (!todayPlan) return;
+    router.push(`/workout/session?workoutId=${todayPlan.id}`);
+  };
+
+  const handleReschedule = async () => {
+    if (!user || !missedWorkout) return;
+    setRescheduling(true);
+    const todayStr = toLocalDateStr(new Date());
+    await rescheduleMissedWorkout(user.id, missedWorkout.id, todayStr);
+    
+    // Reload data
+    const [todayWorkout, weekWorkouts, missed] = await Promise.all([
+      getTodayWorkout(user.id, todayStr),
+      // Need start of week
+      getWeekSchedule(user.id, toLocalDateStr(new Date(new Date().setDate(new Date().getDate() - (new Date().getDay() === 0 ? 6 : new Date().getDay() - 1))))),
+      getMissedWorkouts(user.id, todayStr)
+    ]);
+    
+    setTodayPlan(todayWorkout);
+    setMissedWorkout(missed.length > 0 ? missed[0] : null);
+    
+    // Repopulate weekPlan loosely
+    const monday = new Date();
+    monday.setDate(monday.getDate() - (monday.getDay() === 0 ? 6 : monday.getDay() - 1));
+    const paddedWeek = Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const dStr = toLocalDateStr(d);
+      const existing = weekWorkouts.find(w => w.scheduled_date === dStr);
+      return existing || {
+        id: 'dummy-' + i,
+        scheduled_date: dStr,
+        status: 'pending',
+        is_rest_day: true,
+        actual_duration_minutes: null,
+        workouts: null,
+        daily_workout_exercises: []
+      };
+    });
+    setWeekPlan(paddedWeek as DailyWorkoutWithDetails[]);
+    setRescheduling(false);
   };
 
   if (loading) {
@@ -73,24 +149,44 @@ export default function WorkoutScreen() {
     );
   }
 
-  const todayMeta = todayPlan?.category ? CATEGORY_META[todayPlan.category as MuscleCategory] : null;
-  const todayIdx = new Date().getDay();
-  const dateStr = new Date().toLocaleDateString('en-US', {
+  const todayMeta = getCategoryMeta(todayPlan?.workouts?.name);
+  const todayDateStr = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'short', day: 'numeric',
   });
+  
+  const todayLocalStr = toLocalDateStr(new Date());
+  const previewExercises = todayPlan?.daily_workout_exercises.slice(0, 3) || [];
+  const totalExercises = todayPlan?.daily_workout_exercises.length || 0;
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
+        {/* ── Missed Workout Alert ── */}
+        {missedWorkout && (
+          <View style={styles.missedCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.missedTitle}>Missed Workout</Text>
+              <Text style={styles.missedSub}>You missed {missedWorkout.workouts?.name || 'a workout'} on {missedWorkout.scheduled_date}.</Text>
+            </View>
+            <TouchableOpacity style={styles.rescheduleBtn} onPress={handleReschedule} disabled={rescheduling}>
+              {rescheduling ? (
+                <ActivityIndicator color="#000" size="small" />
+              ) : (
+                <Text style={styles.rescheduleBtnText}>Reschedule</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* ── Greeting header ── */}
         <View style={styles.greeting}>
           <Text style={styles.greetingTitle}>Today's Plan</Text>
-          <Text style={styles.greetingDate}>{dateStr}</Text>
+          <Text style={styles.greetingDate}>{todayDateStr}</Text>
         </View>
 
         {/* ── Today card ── */}
-        {todayPlan?.isRestDay ? (
+        {(!todayPlan || todayPlan.is_rest_day) ? (
           <View style={styles.restCard}>
             <Moon size={44} color="#6C63FF" />
             <Text style={styles.restTitle}>Rest Day</Text>
@@ -99,14 +195,14 @@ export default function WorkoutScreen() {
             </Text>
           </View>
         ) : (
-          <View style={[styles.todayCard, { borderColor: (todayMeta?.color ?? '#ccff00') + '50' }]}>
+          <View style={[styles.todayCard, { borderColor: todayMeta.color + '50' }]}>
             {/* Card header */}
             <View style={styles.todayCardHeader}>
-              <Text style={styles.todayCardBigIcon}>{todayMeta?.icon}</Text>
+              <Text style={styles.todayCardBigIcon}>{todayMeta.icon}</Text>
               <View style={{ flex: 1, marginLeft: 14 }}>
-                <Text style={styles.todayCardLabel}>{todayPlan?.label}</Text>
+                <Text style={styles.todayCardLabel}>{todayMeta.label}</Text>
                 <Text style={styles.todayCardMeta}>
-                  {workoutMode === 'gym' ? '🏋️ Gym' : '🏠 Home'} · {totalExercises} exercises
+                  {todayPlan.workouts?.duration_minutes || 45} mins · {totalExercises} exercises
                 </Text>
               </View>
               <Flame size={22} color="#F59E0B" />
@@ -114,12 +210,12 @@ export default function WorkoutScreen() {
 
             {/* Exercise preview rows */}
             <View style={styles.previewList}>
-              {previewExercises.map((ex, i) => (
-                <View key={ex.id} style={styles.previewRow}>
+              {previewExercises.map((dwe, i) => (
+                <View key={dwe.id} style={styles.previewRow}>
                   <Text style={styles.previewNum}>{String(i + 1).padStart(2, '0')}</Text>
-                  <Text style={styles.previewIcon}>{ex.icon}</Text>
-                  <Text style={styles.previewName} numberOfLines={1}>{ex.name}</Text>
-                  <Text style={styles.previewSets}>{ex.sets} × {ex.reps}</Text>
+                  <Text style={styles.previewIcon}>{'💪'}</Text>
+                  <Text style={styles.previewName} numberOfLines={1}>{dwe.exercises?.name || 'Exercise'}</Text>
+                  <Text style={styles.previewSets}>{dwe.sets} × {dwe.reps || dwe.rest_duration_seconds + 's'}</Text>
                 </View>
               ))}
               {totalExercises > 3 && (
@@ -128,37 +224,45 @@ export default function WorkoutScreen() {
             </View>
 
             {/* Start CTA */}
-            <TouchableOpacity
-              style={styles.startBtn}
-              onPress={startWorkout}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.startBtnText}>START WORKOUT 🔥</Text>
-              <ChevronRight size={20} color="#000" />
-            </TouchableOpacity>
+            {todayPlan.status === 'completed' ? (
+              <View style={[styles.startBtn, { backgroundColor: '#374151' }]}>
+                <Text style={[styles.startBtnText, { color: '#9CA3AF' }]}>WORKOUT COMPLETED</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.startBtn}
+                onPress={startWorkout}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.startBtnText}>START WORKOUT 🔥</Text>
+                <ChevronRight size={20} color="#000" />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
         {/* ── Weekly strip ── */}
         <Text style={styles.sectionTitle}>THIS WEEK</Text>
         <View style={styles.weekStrip}>
-          {weekPlan.map((dp) => {
-            const meta = dp.category ? CATEGORY_META[dp.category as MuscleCategory] : null;
-            const isToday = dp.day === todayIdx;
+          {weekPlan.map((dp, idx) => {
+            const meta = getCategoryMeta(dp.workouts?.name);
+            const isToday = dp.scheduled_date === todayLocalStr;
+            const dayName = new Date(dp.scheduled_date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+            
             return (
               <View
-                key={dp.day}
+                key={dp.scheduled_date + idx}
                 style={[
                   styles.dayChip,
                   isToday && styles.dayChipToday,
-                  dp.isRestDay && !isToday && styles.dayChipRest,
+                  dp.is_rest_day && !isToday && styles.dayChipRest,
                 ]}
               >
                 <Text style={[styles.dayChipName, isToday && styles.dayChipNameToday]}>
-                  {dp.dayName}
+                  {dayName}
                 </Text>
                 <Text style={styles.dayChipIcon}>
-                  {dp.isRestDay ? '😴' : (meta?.icon ?? '💪')}
+                  {dp.is_rest_day ? '😴' : meta.icon}
                 </Text>
                 {isToday && <View style={styles.todayDot} />}
               </View>
@@ -170,22 +274,24 @@ export default function WorkoutScreen() {
         <Text style={styles.sectionTitle}>SCHEDULE</Text>
         <View style={styles.scheduleCard}>
           {weekPlan.map((dp, i) => {
-            const meta = dp.category ? CATEGORY_META[dp.category as MuscleCategory] : null;
-            const isToday = dp.day === todayIdx;
+            const meta = getCategoryMeta(dp.workouts?.name);
+            const isToday = dp.scheduled_date === todayLocalStr;
+            const dayName = new Date(dp.scheduled_date).toLocaleDateString('en-US', { weekday: 'short' });
+            
             return (
-              <View key={dp.day}>
+              <View key={dp.scheduled_date + i}>
                 <View style={[styles.scheduleRow, isToday && styles.scheduleRowToday]}>
                   <Text style={[styles.scheduleDayName, isToday && styles.scheduleDayToday]}>
-                    {dp.dayName}
+                    {dayName}
                   </Text>
-                  {dp.isRestDay ? (
+                  {dp.is_rest_day ? (
                     <View style={styles.scheduleRestBadge}>
                       <Text style={styles.scheduleRestText}>Rest</Text>
                     </View>
                   ) : (
                     <View style={styles.scheduleWorkoutBadge}>
-                      <Text style={styles.scheduleWorkoutIcon}>{meta?.icon}</Text>
-                      <Text style={styles.scheduleWorkoutLabel}>{dp.label}</Text>
+                      <Text style={styles.scheduleWorkoutIcon}>{meta.icon}</Text>
+                      <Text style={styles.scheduleWorkoutLabel}>{meta.label}</Text>
                     </View>
                   )}
                   {isToday && <Text style={styles.todayTag}>TODAY</Text>}
@@ -210,6 +316,29 @@ const styles = StyleSheet.create({
   greeting: { marginBottom: 24, marginTop: 4 },
   greetingTitle: { fontSize: 30, fontWeight: '900', color: '#FFFFFF' },
   greetingDate: { fontSize: 14, color: '#6B7280', marginTop: 4 },
+
+  // Missed workout
+  missedCard: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    marginTop: 4,
+  },
+  missedTitle: { color: '#EF4444', fontSize: 16, fontWeight: 'bold' },
+  missedSub: { color: '#FCA5A5', fontSize: 13, marginTop: 4 },
+  rescheduleBtn: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  rescheduleBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
 
   // Rest card
   restCard: {

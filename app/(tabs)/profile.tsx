@@ -21,6 +21,11 @@ type Profile = {
   fitness_level: string;
   current_streak: number;
   longest_streak: number;
+  push_up_ability?: string;
+  pull_up_ability?: string;
+  plank_ability?: string;
+  training_location?: string;
+  limitations?: string[];
 };
 
 function getBmiColor(bmi: number): string {
@@ -199,6 +204,25 @@ export default function ProfileScreen() {
           <View style={styles.infoRow}>
             <Text style={styles.infoKey}>Best Streak</Text>
             <Text style={styles.infoValue}>{profile?.longest_streak || 0} days</Text>
+          </View>
+        </View>
+
+        {/* Abilities */}
+        <Text style={styles.sectionTitle}>CURRENT BASELINE</Text>
+        <View style={styles.infoCard}>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoKey}>Push-ups</Text>
+            <Text style={styles.infoValue}>{profile?.push_up_ability || '—'}</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoKey}>Pull-ups</Text>
+            <Text style={styles.infoValue}>{profile?.pull_up_ability || '—'}</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoKey}>Plank</Text>
+            <Text style={styles.infoValue}>{profile?.plank_ability || '—'}</Text>
           </View>
         </View>
 

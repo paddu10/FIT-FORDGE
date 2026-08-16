@@ -5,8 +5,16 @@ import { LogBox } from 'react-native';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 
 // Suppress the harmless third-party warning from react-native-gifted-charts on the Web
-LogBox.ignoreLogs(['Unknown event handler property `onPressOut`']);
+LogBox.ignoreLogs(['Unknown event handler property']);
 
+const originalConsoleError = console.error;
+console.error = (...args: any[]) => {
+  const argString = args.join(' ');
+  if (argString.includes('Unknown event handler property')) {
+    return;
+  }
+  originalConsoleError(...args);
+};
 function RootLayoutNav() {
   const { session, isInitialized, onboardingCompleted } = useAuth();
   const segments = useSegments();

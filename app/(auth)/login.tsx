@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, SafeAreaVie
 import { Link, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { Dumbbell, Mail, Lock, CheckSquare, Square } from 'lucide-react-native';
+import { PremiumButton } from '../../components/PremiumButton';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -10,15 +11,23 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
 
   async function signInWithEmail() {
     setLoading(true);
+    setErrorMessage('');
     const { error } = await supabase.auth.signInWithPassword({
       email: email,
       password: password,
     });
 
-    if (error) Alert.alert('Login Failed', error.message);
+    if (error) {
+      if (error.message.includes('Invalid login credentials')) {
+        setErrorMessage('Wrong password or email');
+      } else {
+        setErrorMessage(error.message);
+      }
+    }
     setLoading(false);
   }
 
@@ -57,6 +66,12 @@ export default function LoginScreen() {
                 </View>
                 <Text style={styles.cardSubtitle}>Enter your details to sync your daily rings</Text>
 
+                {errorMessage ? (
+                  <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>{errorMessage}</Text>
+                  </View>
+                ) : null}
+
                 <View style={styles.form}>
                   <View style={styles.inputGroup}>
                     <Text style={styles.label}>Gmail / Email Address</Text>
@@ -86,6 +101,8 @@ export default function LoginScreen() {
                         value={password}
                         secureTextEntry={true}
                         autoCapitalize="none"
+                        returnKeyType="go"
+                        onSubmitEditing={signInWithEmail}
                       />
                     </View>
                   </View>
@@ -108,15 +125,12 @@ export default function LoginScreen() {
                     </TouchableOpacity>
                   </View>
 
-                  <TouchableOpacity 
-                    style={[styles.button, loading && styles.buttonDisabled]} 
+                  <PremiumButton 
+                    title={loading ? 'SIGNING IN...' : 'CONTINUE WITH EMAIL ➔'}
                     onPress={signInWithEmail}
                     disabled={loading}
-                  >
-                    <Text style={styles.buttonText}>
-                      {loading ? 'SIGNING IN...' : 'SIGN IN NOW ➔'}
-                    </Text>
-                  </TouchableOpacity>
+                    loading={loading}
+                  />
 
                   <View style={styles.footer}>
                     <Text style={styles.footerText}>Don't have an account? </Text>
@@ -161,6 +175,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  logoImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   logoText: {
     fontSize: 24,
@@ -219,6 +238,20 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontSize: 14,
     marginBottom: 24,
+  },
+  errorContainer: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   form: {
     gap: 20,

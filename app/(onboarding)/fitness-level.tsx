@@ -51,7 +51,7 @@ export default function FitnessLevelScreen() {
         return;
       }
       setLoading(false);
-      router.push('/(onboarding)/equipment');
+      router.push('/(onboarding)/abilities');
     } catch (err) {
       console.error('[FitnessLevel] Unexpected error:', err);
       Alert.alert('Error', 'Something went wrong. Please try again.');

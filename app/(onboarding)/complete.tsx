@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 import { CheckCircle2, Flame, Droplets } from 'lucide-react-native';
+import { generateFutureSchedule } from '../../lib/WorkoutEngine';
 
 export default function CompleteScreen() {
   const { user, refreshProfile } = useAuth();
@@ -151,6 +152,10 @@ export default function CompleteScreen() {
 
       console.log('[Complete] Save verified successfully! calorie_target =', metrics.calorie_target);
       
+      // Generate the user's initial schedule for the next 14 days
+      const todayStr = new Date().toLocaleDateString('en-CA');
+      await generateFutureSchedule(user.id, todayStr, 14);
+
       // Now refresh the AuthContext so it knows onboarding is complete
       await refreshProfile();
       // The router in _layout.tsx will automatically redirect to (tabs)

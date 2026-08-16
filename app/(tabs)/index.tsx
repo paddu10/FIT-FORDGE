@@ -1,11 +1,20 @@
-import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, ActivityIndicator, ImageBackground } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { initializeDailyTasks, checkAndUpdateStreak } from '../../lib/TaskEngine';
-import { Flame, PlayCircle, CheckCircle2, Circle, LogOut } from 'lucide-react-native';
-import { getBmiCategory } from '../../data/workouts';
+import { Flame, User as UserIcon } from 'lucide-react-native';
+import { WorkoutHero } from '../../components/WorkoutHero';
+import { MetricCard } from '../../components/MetricCard';
+import { WeeklyActivity, WeekData, DayStatus } from '../../components/WeeklyActivity';
+import { CalisthenicsProgress, SkillProgress } from '../../components/CalisthenicsProgress';
+import { getDailyQuote } from '../../data/quotes';
+import { getTodayWorkout } from '../../lib/WorkoutService';
+import { theme } from '../../constants/theme';
+import Animated, { FadeIn, FadeInDown, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, interpolate, Extrapolation } from 'react-native-reanimated';
+import { BlurView } from 'expo-blur';
+
+const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 export default function HomeScreen() {
   const { user } = useAuth();
@@ -14,15 +23,19 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
   const [dailyWorkout, setDailyWorkout] = useState<any>(null);
-  const [tasks, setTasks] = useState<any[]>([]);
+  const [totalWorkouts, setTotalWorkouts] = useState(0);
+  const [weekData, setWeekData] = useState<WeekData[]>([]);
+  const [skills, setSkills] = useState<SkillProgress[]>([]);
+  const quote = getDailyQuote();
 
-  useEffect(() => {
+  useFocusEffect(
+    useCallback(() => {
     async function loadDashboard() {
       if (!user) return;
       setLoading(true);
 
       try {
-        // Load Profile (for name, streak, calories)
+        // 1. Load Profile
         const { data: profileData } = await supabase
           .from('profiles')
           .select('*')
@@ -31,23 +44,30 @@ export default function HomeScreen() {
         
         if (profileData) setProfile(profileData);
 
-        // Load Today's Workout
-        const today = new Date().toISOString().split('T')[0];
-        const { data: workoutData } = await supabase
-          .from('daily_workouts')
-          .select(`
-            id, status, actual_duration_minutes,
-            workouts (name, duration_minutes, fitness_level)
-          `)
-          .eq('user_id', user.id)
-          .eq('scheduled_date', today)
-          .single();
+        // 2. Load Today's Workout
+        const todayStr = new Date().toLocaleDateString('en-CA'); // local YYYY-MM-DD
+        const workoutData = await getTodayWorkout(user.id, todayStr);
         
         if (workoutData) setDailyWorkout(workoutData);
 
-        // Initialize and Load Tasks
-        const dailyTasks = await initializeDailyTasks(user.id);
-        setTasks(dailyTasks);
+        // 3. Load Total Workouts
+        const { count } = await supabase
+          .from('daily_workouts')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('status', 'completed');
+        
+        setTotalWorkouts(count || 0);
+
+        // 4. Generate Weekly Activity
+        const wData = await generateWeekData(user.id, todayStr);
+        setWeekData(wData);
+
+        // 5. Calculate Calisthenics Progress
+        if (profileData) {
+          const mappedSkills = mapAbilitiesToProgress(profileData);
+          setSkills(mappedSkills);
+        }
 
       } catch (e) {
         console.error(e);
@@ -57,185 +77,289 @@ export default function HomeScreen() {
     }
     
     loadDashboard();
-  }, [user]);
+    }, [user])
+  );
 
-  const toggleTask = async (task: any) => {
-    if (task.completed) return; // Prevent unchecking as per PRD "Prevent accidental repeated completion"
+  async function generateWeekData(userId: string, todayStr: string): Promise<WeekData[]> {
+    const today = new Date();
+    // 0 = Sunday, 1 = Monday. Let's make Monday = 0
+    const dayOfWeek = today.getDay() === 0 ? 6 : today.getDay() - 1;
+    
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - dayOfWeek);
 
-    try {
-      const { error } = await supabase
-        .from('daily_tasks')
-        .update({ completed: true, completed_at: new Date().toISOString() })
-        .eq('id', task.id);
+    const weekDates = Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return {
+        date: d.toLocaleDateString('en-CA'),
+        dayStr: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'][i],
+        isToday: i === dayOfWeek
+      };
+    });
 
-      if (!error) {
-        setTasks(tasks.map(t => t.id === task.id ? { ...t, completed: true } : t));
-        
-        // Check if all tasks are complete to update streak
-        if (user) {
-          await checkAndUpdateStreak(user.id);
-          // Refresh profile streak silently
-          const { data } = await supabase.from('profiles').select('current_streak').eq('id', user.id).single();
-          if (data && profile) {
-            setProfile({ ...profile, current_streak: data.current_streak });
-          }
-        }
+    // Fetch this week's workouts
+    const { data } = await supabase
+      .from('daily_workouts')
+      .select('scheduled_date, status, is_rest_day')
+      .eq('user_id', userId)
+      .gte('scheduled_date', weekDates[0].date)
+      .lte('scheduled_date', weekDates[6].date);
+      
+    const lookup = (data || []).reduce((acc: any, w: any) => {
+      acc[w.scheduled_date] = w;
+      return acc;
+    }, {});
+
+    return weekDates.map(wd => {
+      const w = lookup[wd.date];
+      let status: DayStatus = 'upcoming';
+      
+      if (w) {
+        if (w.status === 'completed') status = 'completed';
+        else if (w.is_rest_day) status = 'rest';
+        else if (wd.date < todayStr) status = 'missed';
+        else status = 'upcoming';
+      } else {
+        if (wd.date < todayStr) status = 'missed';
       }
-    } catch (e) {
-      console.error(e);
+      return { ...wd, status };
+    });
+  }
+
+  function mapAbilitiesToProgress(p: any): SkillProgress[] {
+    const s: SkillProgress[] = [];
+    const mapVal = (val: string) => {
+      if (!val || val === '0') return 10;
+      if (val === '1-5') return 40;
+      if (val === '5-10') return 70;
+      if (val === '10+') return 100;
+      return 0;
+    };
+    if (p.pull_up_ability) s.push({ name: 'Pull-up', percentage: mapVal(p.pull_up_ability) });
+    if (p.push_up_ability) s.push({ name: 'Push-up', percentage: mapVal(p.push_up_ability) });
+    if (p.plank_ability) s.push({ name: 'Plank', percentage: mapVal(p.plank_ability) });
+    
+    // Add dummy skills if empty to show the premium empty state visually
+    if (s.length === 0) {
+      return [];
     }
-  };
+    return s;
+  }
 
   const getTimeOfDay = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
     if (hour < 17) return 'Good afternoon';
-    if (hour < 21) return 'Good evening';
-    return 'Good night';
+    return 'Good evening';
   };
+
+  const renderQuote = (q: string, emphasis: string) => {
+    const parts = q.split(emphasis);
+    if (parts.length === 2) {
+      return (
+        <Text style={styles.quoteText}>
+          {parts[0]}
+          <Text style={styles.quoteEmphasis}>{emphasis}</Text>
+          {parts[1]}
+        </Text>
+      );
+    }
+    return <Text style={styles.quoteText}>{q}</Text>;
+  };
+
+  const scrollY = useSharedValue(0);
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+
+  const stickyHeaderStyle = useAnimatedStyle(() => {
+    return {
+      opacity: interpolate(scrollY.value, [40, 100], [0, 1], Extrapolation.CLAMP),
+    };
+  });
 
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator size="large" color="#ccff00" />
+        <ActivityIndicator size="large" color={theme.colors.accent} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+    <ImageBackground 
+      source={require('../../assets/Gemini_Generated_Image_nypg02nypg02nypg.png')}
+      style={styles.bgWrapper}
+      imageStyle={styles.bgImage}
+      resizeMode="cover"
+    >
+      <SafeAreaView style={styles.container}>
         
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-            <View>
-              <Text style={styles.greeting}>{getTimeOfDay()}, {profile?.name || 'Athlete'} 👋</Text>
-              <Text style={styles.dateText}>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</Text>
-              {(() => {
-                let bmiValue = profile?.bmi;
-                if (!bmiValue && profile?.weight && profile?.height) {
-                  const hM = profile.height / 100;
-                  bmiValue = profile.weight / (hM * hM);
-                }
-                
-                if (bmiValue) {
-                  return (
-                    <View style={styles.bmiBadge}>
-                      <Text style={styles.bmiBadgeText}>
-                        BMI {Number(bmiValue).toFixed(1)} · {getBmiCategory(Number(bmiValue)).charAt(0).toUpperCase() + getBmiCategory(Number(bmiValue)).slice(1)}
-                      </Text>
-                    </View>
-                  );
-                }
-                return null;
-              })()}
-            </View>
-            <TouchableOpacity onPress={() => supabase.auth.signOut()}>
-              <LogOut color="#EF4444" size={24} />
+        {/* STICKY BLUR HEADER */}
+        <AnimatedBlurView intensity={80} tint="dark" style={[styles.stickyHeader, stickyHeaderStyle]}>
+          <View style={styles.stickyHeaderContent}>
+            <Text style={styles.stickyHeaderTitle}>FIT FORGE</Text>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.avatarSmall}>
+              <UserIcon color="#FFF" size={18} />
             </TouchableOpacity>
           </View>
-        </View>
+        </AnimatedBlurView>
 
-        {/* Streak Card */}
-        <View style={styles.streakCard}>
-          <View style={styles.streakIconContainer}>
-            <Flame size={32} color="#F59E0B" />
-          </View>
-          <View>
-            <Text style={styles.streakTitle}>{profile?.current_streak || 0} DAY STREAK</Text>
-            <Text style={styles.streakSubtitle}>Keep the fire burning!</Text>
-          </View>
-        </View>
-
-        {/* Today's Workout Card */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>TODAY'S WORKOUT</Text>
-          <TouchableOpacity 
-            style={styles.workoutCard} 
-            activeOpacity={0.8}
-            onPress={() => router.push('/(tabs)/workout')}
-          >
-            {dailyWorkout ? (
-              <>
-                <View style={styles.workoutInfo}>
-                  <Text style={styles.workoutName}>{(dailyWorkout.workouts as any)?.name || 'Custom Workout'}</Text>
-                  <Text style={styles.workoutDetails}>
-                    {(dailyWorkout.workouts as any)?.duration_minutes || 30} min • {(dailyWorkout.workouts as any)?.fitness_level || 'Mixed'}
-                  </Text>
-                </View>
-                {dailyWorkout.status === 'completed' ? (
-                  <View style={styles.completedBadge}>
-                    <CheckCircle2 size={24} color="#22C55E" />
-                  </View>
-                ) : (
-                  <View style={styles.playButton}>
-                    <PlayCircle size={32} color="#ccff00" />
-                  </View>
-                )}
-              </>
-            ) : (
-              <View style={styles.workoutInfo}>
-                <Text style={styles.workoutName}>Rest Day</Text>
-                <Text style={styles.workoutDetails}>Take time to recover</Text>
+        <Animated.ScrollView 
+          contentContainerStyle={styles.scrollContent} 
+          showsVerticalScrollIndicator={false}
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+        >
+          
+          {/* HEADER */}
+          <Animated.View entering={FadeIn.delay(100)} style={styles.header}>
+            <View style={styles.headerTop}>
+              <View>
+                <Text style={styles.greeting}>{getTimeOfDay()}, {profile?.name?.split(' ')[0] || 'Athlete'}</Text>
+                <Text style={styles.greetingSub}>Ready to train?</Text>
               </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Daily Tasks */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>TODAY'S TASKS</Text>
-          <View style={styles.tasksContainer}>
-            {tasks.map(task => (
-              <TouchableOpacity 
-                key={task.id} 
-                style={[styles.taskRow, task.completed && styles.taskRowCompleted]}
-                onPress={() => toggleTask(task)}
-                activeOpacity={0.7}
-              >
-                {task.completed ? (
-                  <CheckCircle2 size={24} color="#22C55E" />
-                ) : (
-                  <Circle size={24} color="#4B5563" />
-                )}
-                <Text style={[styles.taskTitle, task.completed && styles.taskTitleCompleted]}>
-                  {task.title}
-                </Text>
+              <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.avatar}>
+                <UserIcon color="#FFF" size={24} />
               </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Progress Card */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>TODAY'S PROGRESS</Text>
-          <View style={styles.progressCard}>
-            <View style={styles.progressRow}>
-              <Text style={styles.progressLabel}>CALORIES</Text>
-              <Text style={styles.progressValue}>
-                0 / {profile?.calorie_target || 2000} <Text style={styles.progressUnit}>kcal</Text>
-              </Text>
             </View>
-            <View style={styles.divider} />
-            <View style={styles.progressRow}>
-              <Text style={styles.progressLabel}>PROTEIN</Text>
-              <Text style={styles.progressValue}>
-                0 / {profile?.protein_target || 100} <Text style={styles.progressUnit}>g</Text>
-              </Text>
-            </View>
-          </View>
-        </View>
+          </Animated.View>
 
-      </ScrollView>
-    </SafeAreaView>
+          {/* MOTIVATIONAL QUOTE */}
+          <Animated.View entering={FadeIn.delay(200)} style={styles.quoteContainer}>
+            {renderQuote(quote.quote, quote.emphasis)}
+            <Text style={styles.brandText}>FIT FORGE</Text>
+          </Animated.View>
+
+          {/* TODAY'S WORKOUT */}
+          <Animated.View entering={FadeInDown.delay(300).springify()}>
+            <Text style={styles.sectionTitle}>TODAY'S SESSION</Text>
+            {dailyWorkout && !dailyWorkout.is_rest_day ? (
+              <WorkoutHero
+                title={(dailyWorkout.workouts as any)?.name || 'Custom Workout'}
+                category="DAILY PLAN"
+                duration={(dailyWorkout.workouts as any)?.duration_minutes || 45}
+                difficulty={(dailyWorkout.workouts as any)?.fitness_level || 'MIXED'}
+                isCompleted={dailyWorkout.status === 'completed'}
+                onPressStart={() => router.push('/(tabs)/workout')}
+                style={styles.heroSpacing}
+              />
+            ) : (
+              <WorkoutHero
+                title="RECOVERY DAY"
+                category="REST"
+                onPressStart={() => {}}
+                style={styles.heroSpacing}
+              />
+            )}
+          </Animated.View>
+
+          {/* STREAK */}
+          <Animated.View entering={FadeInDown.delay(400).springify()}>
+            <View style={styles.streakCard}>
+              <View style={styles.streakHeader}>
+                <Flame size={24} color={theme.colors.accent} />
+                <Text style={styles.streakTitle}>{profile?.current_streak || 0} DAY STREAK</Text>
+              </View>
+              <WeeklyActivity data={weekData} style={styles.transparentActivity} />
+            </View>
+          </Animated.View>
+
+          {/* QUICK STATS */}
+          <Animated.View entering={FadeInDown.delay(500).springify()}>
+            <Text style={styles.sectionTitle}>YOUR STATS</Text>
+            <View style={styles.statsRow}>
+              <MetricCard 
+                label="WEIGHT"
+                value={profile?.weight || '--'}
+                unit="kg"
+              />
+              <MetricCard 
+                label="WORKOUTS"
+                value={totalWorkouts}
+              />
+              <MetricCard 
+                label="BEST STREAK"
+                value={profile?.longest_streak || 0}
+              />
+            </View>
+          </Animated.View>
+
+          {/* CALISTHENICS JOURNEY */}
+          <Animated.View entering={FadeInDown.delay(600).springify()} style={styles.sectionMargin}>
+            <CalisthenicsProgress skills={skills} />
+          </Animated.View>
+
+          {/* QUICK ACTIONS */}
+          <Animated.View entering={FadeInDown.delay(700).springify()} style={styles.sectionMargin}>
+            <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
+            <View style={styles.actionsGrid}>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/(tabs)/profile')}>
+                <Text style={styles.actionBtnText}>Track Weight</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/(tabs)/training_days')}>
+                <Text style={styles.actionBtnText}>Edit Schedule</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/(tabs)/edit-schedule')}>
+                <Text style={styles.actionBtnText}>Move Workout</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+
+        </Animated.ScrollView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  bgWrapper: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  bgImage: {
+    opacity: 0.15,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#08090C',
+    backgroundColor: 'transparent', // Let background show through
+  },
+  stickyHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    paddingTop: 50, // accommodate safe area roughly
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  stickyHeaderContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  stickyHeaderTitle: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.typography.weights.black,
+    letterSpacing: 2,
+  },
+  avatarSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.colors.elevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   centerContent: {
     justifyContent: 'center',
@@ -243,166 +367,116 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 60,
   },
   header: {
-    marginBottom: 24,
-    marginTop: 8,
+    marginTop: 10,
+    marginBottom: 40,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   greeting: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#FFFFFF',
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: theme.typography.weights.medium,
   },
-  dateText: {
-    fontSize: 15,
-    color: '#9CA3AF',
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  bmiBadge: {
-    alignSelf: 'flex-start',
-    marginTop: 10,
-    backgroundColor: 'rgba(204, 255, 0, 0.12)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(204, 255, 0, 0.3)',
-  },
-  bmiBadgeText: {
-    color: '#ccff00',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  streakCard: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.2)',
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  streakIconContainer: {
-    backgroundColor: 'rgba(245, 158, 11, 0.2)',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-  },
-  streakTitle: {
-    color: '#F59E0B',
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
-  streakSubtitle: {
-    color: '#D97706',
+  greetingSub: {
+    color: theme.colors.textSecondary,
     fontSize: 14,
     marginTop: 2,
   },
-  section: {
-    marginBottom: 28,
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: theme.colors.elevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  quoteContainer: {
+    marginBottom: 48,
+  },
+  quoteText: {
+    color: theme.colors.text,
+    fontSize: 34,
+    fontWeight: theme.typography.weights.medium,
+    lineHeight: 40,
+    letterSpacing: -0.5,
+  },
+  quoteEmphasis: {
+    color: theme.colors.accent,
+    fontWeight: theme.typography.weights.bold,
+  },
+  brandText: {
+    color: theme.colors.textMuted,
+    fontSize: 10,
+    fontWeight: theme.typography.weights.black,
+    letterSpacing: 4,
+    marginTop: 16,
   },
   sectionTitle: {
-    color: '#9CA3AF',
-    fontSize: 13,
-    fontWeight: 'bold',
-    letterSpacing: 1.2,
-    marginBottom: 12,
-    marginLeft: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: theme.typography.weights.bold,
+    letterSpacing: 1.5,
+    marginBottom: 16,
   },
-  workoutCard: {
-    backgroundColor: '#161921',
-    borderRadius: 16,
-    padding: 20,
+  heroSpacing: {
+    marginBottom: 32,
+  },
+  streakCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    padding: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginBottom: 32,
+  },
+  streakHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#2D3748',
+    marginBottom: 16,
+    gap: 8,
   },
-  workoutInfo: {
-    flex: 1,
-  },
-  workoutName: {
-    color: '#FFFFFF',
+  streakTitle: {
+    color: theme.colors.text,
     fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 6,
-  },
-  workoutDetails: {
-    color: '#64748B',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  playButton: {
-    padding: 8,
-  },
-  completedBadge: {
-    padding: 8,
-  },
-  tasksContainer: {
-    backgroundColor: '#161921',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#2D3748',
-    overflow: 'hidden',
-  },
-  taskRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E2430',
-  },
-  taskRowCompleted: {
-    backgroundColor: 'rgba(34, 197, 94, 0.05)',
-  },
-  taskTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 16,
-  },
-  taskTitleCompleted: {
-    color: '#9CA3AF',
-    textDecorationLine: 'line-through',
-  },
-  progressCard: {
-    backgroundColor: '#161921',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#2D3748',
-    padding: 20,
-  },
-  progressRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#1E2430',
-    marginVertical: 16,
-  },
-  progressLabel: {
-    color: '#9CA3AF',
-    fontSize: 13,
-    fontWeight: 'bold',
+    fontWeight: theme.typography.weights.black,
     letterSpacing: 0.5,
   },
-  progressValue: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
+  transparentActivity: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    padding: 0,
   },
-  progressUnit: {
-    color: '#64748B',
-    fontSize: 14,
-  }
+  statsRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+  },
+  sectionMargin: {
+    marginTop: 32,
+  },
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  actionBtn: {
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: theme.radius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  actionBtnText: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: theme.typography.weights.bold,
+  },
 });

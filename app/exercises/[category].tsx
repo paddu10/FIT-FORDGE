@@ -47,7 +47,24 @@ export default function ExerciseCategoryScreen() {
         {exercises.map((exercise, index) => {
           const diff = DIFFICULTY_COLORS[exercise.difficulty];
           return (
-            <View key={exercise.id} style={styles.card}>
+            <TouchableOpacity 
+              key={exercise.id} 
+              style={styles.card}
+              activeOpacity={0.7}
+              onPress={() => router.push({
+                pathname: '/exercises/detail',
+                params: {
+                  name: exercise.name,
+                  description: exercise.description,
+                  muscle_group: exercise.category,
+                  difficulty: exercise.difficulty,
+                  equipment: exercise.mode === 'gym' ? 'Gym Equipment' : 'Bodyweight',
+                  sets: exercise.sets,
+                  reps: exercise.reps,
+                  rest: exercise.restSeconds
+                }
+              })}
+            >
               <View style={styles.cardHeader}>
                 <Text style={styles.exerciseNum}>{String(index + 1).padStart(2, '0')}</Text>
                 <View style={[styles.diffBadge, { backgroundColor: diff.bg }]}>
@@ -73,7 +90,7 @@ export default function ExerciseCategoryScreen() {
                   <Text style={styles.statText}>{exercise.restSeconds}s rest</Text>
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })}
 

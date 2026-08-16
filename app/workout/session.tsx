@@ -4,7 +4,7 @@ import {
   TextInput, TouchableOpacity, Alert, StatusBar,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, SkipForward, Check } from 'lucide-react-native';
+import { ArrowLeft, SkipForward, Check, Info, PlayCircle } from 'lucide-react-native';
 import Svg, { Circle } from 'react-native-svg';
 import Animated, {
   useSharedValue,
@@ -21,6 +21,9 @@ import {
   WorkoutMode,
   BmiCategory,
 } from '../../data/workouts';
+import { ExerciseAnimation } from '../../components/ExerciseAnimation';
+import { PremiumButton } from '../../components/PremiumButton';
+import { theme } from '../../constants/theme';
 
 // ── Animated SVG circle for the rest timer ring ──
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -213,12 +216,17 @@ export default function SessionScreen() {
   // ── Empty guard ──────────────────────────────────
   if (exercises.length === 0) {
     return (
-      <SafeAreaView style={[styles.container, styles.center]}>
-        <Text style={styles.emptyIcon}>🤷</Text>
-        <Text style={styles.emptyText}>No exercises found for this profile.</Text>
-        <TouchableOpacity style={styles.backBtnSolo} onPress={() => router.back()}>
-          <Text style={styles.backBtnSoloText}>Go Back</Text>
-        </TouchableOpacity>
+      <SafeAreaView style={[styles.container]}>
+        <View style={styles.center}>
+          <PlayCircle color={theme.colors.textMuted} size={48} />
+          <Text style={styles.emptyText}>No exercises in this workout.</Text>
+          <PremiumButton 
+            title="GO BACK" 
+            onPress={handleBack} 
+            size="md"
+            style={{marginTop: theme.spacing.md}}
+          />
+        </View>
       </SafeAreaView>
     );
   }
@@ -249,7 +257,7 @@ export default function SessionScreen() {
         >
           {/* ── Exercise card ── */}
           <Animated.View style={[styles.exCard, cardAnimStyle]}>
-            <Text style={styles.exIcon}>{currentEx.icon}</Text>
+            <ExerciseAnimation placeholderTitle={currentEx.name} />
             <Text style={styles.exDesc}>{currentEx.description}</Text>
             <View style={styles.exStats}>
               <View style={styles.exStat}>
@@ -389,16 +397,12 @@ export default function SessionScreen() {
 
         {/* ── Footer CTA ── */}
         <View style={styles.footer}>
-          <TouchableOpacity
-            style={[styles.nextBtn, !allCurrentDone && styles.nextBtnDisabled]}
+          <PremiumButton
+            title={isLastEx ? '🏆  FINISH WORKOUT' : 'NEXT EXERCISE  →'}
             onPress={handleNext}
             disabled={!allCurrentDone}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.nextBtnText}>
-              {isLastEx ? '🏆  FINISH WORKOUT' : 'NEXT EXERCISE  →'}
-            </Text>
-          </TouchableOpacity>
+            variant={allCurrentDone ? 'primary' : 'secondary'}
+          />
           {!allCurrentDone && (
             <Text style={styles.nextHint}>Complete all sets to continue</Text>
           )}

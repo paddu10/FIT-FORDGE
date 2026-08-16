@@ -1,6 +1,10 @@
 import { useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, StatusBar } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../context/AuthContext';
+import { CATEGORY_META, MuscleCategory } from '../../data/workouts';
+import { PremiumButton } from '../../components/PremiumButton';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -10,7 +14,6 @@ import Animated, {
   withSequence,
   Easing,
 } from 'react-native-reanimated';
-import { CATEGORY_META, MuscleCategory } from '../../data/workouts';
 
 // ─── Confetti particle — each is its own component so hooks are legal ───
 const CONFETTI_COLORS = [
@@ -49,7 +52,7 @@ function ConfettiDot({
       { translateX: x.value },
       { translateY: y.value },
       { scale: scale.value },
-    ],
+    ] as any,
     opacity: opacity.value,
     backgroundColor: color,
   }));
@@ -78,7 +81,7 @@ function StatCard({
   }, []);
 
   const style = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
+    transform: [{ translateY: translateY.value }] as any,
     opacity: opacity.value,
   }));
 
@@ -110,19 +113,21 @@ function formatDuration(seconds: number): string {
 
 // ─── Main screen ─────────────────────────────────────────────────────────────
 export default function CompleteScreen() {
-  const { category, totalExercises, totalSets, totalReps, durationSeconds } =
+  const { category, totalExercises, totalSets, totalReps, durationSeconds, newPrs } =
     useLocalSearchParams<{
       category: string;
       totalExercises: string;
       totalSets: string;
       totalReps: string;
       durationSeconds: string;
+      newPrs: string; // Passed as JSON string if any
     }>();
   const router = useRouter();
 
   const cat = (category || 'abs') as MuscleCategory;
   const meta = CATEGORY_META[cat];
   const motivation = MOTIVATION[cat] ?? 'Every rep counts. You did the work. 🏆';
+  const prs = newPrs ? JSON.parse(newPrs) : [{ name: 'Push-up', value: '25 reps' }]; // Dummy PR for demo if none passed
 
   // ── Trophy animation ──
   const trophyScale = useSharedValue(0);
@@ -131,7 +136,7 @@ export default function CompleteScreen() {
     transform: [
       { scale: trophyScale.value },
       { rotate: `${trophyRotate.value}deg` },
-    ],
+    ] as any,
   }));
 
   // ── Title animation ──
@@ -139,7 +144,7 @@ export default function CompleteScreen() {
   const titleY = useSharedValue(20);
   const titleStyle = useAnimatedStyle(() => ({
     opacity: titleOpacity.value,
-    transform: [{ translateY: titleY.value }],
+    transform: [{ translateY: titleY.value }] as any,
   }));
 
   useEffect(() => {
@@ -222,18 +227,32 @@ export default function CompleteScreen() {
             />
           </View>
 
+          {/* ── PR Section ── */}
+          {prs.length > 0 && (
+            <Animated.View style={[styles.prCard, titleStyle]}>
+              <View style={styles.prHeader}>
+                <Text style={styles.prIcon}>🔥</Text>
+                <Text style={styles.prTitle}>NEW PERSONAL RECORD!</Text>
+              </View>
+              {prs.map((pr: any, i: number) => (
+                <View key={i} style={styles.prRow}>
+                  <Text style={styles.prName}>{pr.name}</Text>
+                  <Text style={styles.prValue}>{pr.value}</Text>
+                </View>
+              ))}
+            </Animated.View>
+          )}
+
           {/* ── Motivation ── */}
           <Text style={styles.motivation}>{motivation}</Text>
 
           {/* ── CTA ── */}
           <View style={styles.btnRow}>
-            <TouchableOpacity
-              style={styles.homeBtn}
+            <PremiumButton 
+              title="BACK TO HOME"
               onPress={() => router.replace('/(tabs)')}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.homeBtnText}>BACK TO HOME</Text>
-            </TouchableOpacity>
+              variant="primary"
+            />
           </View>
         </View>
       </SafeAreaView>
@@ -323,6 +342,36 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
+  // ── PR Section ──
+  prCard: {
+    width: '100%',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    padding: 16,
+  },
+  prHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  prIcon: { fontSize: 18 },
+  prTitle: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  prRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  prName: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  prValue: { color: '#EF4444', fontSize: 15, fontWeight: '800' },
+
   // ── Motivation ──
   motivation: {
     color: '#9CA3AF',
@@ -335,16 +384,4 @@ const styles = StyleSheet.create({
 
   // ── Buttons ──
   btnRow: { width: '100%', gap: 12 },
-  homeBtn: {
-    backgroundColor: '#ccff00',
-    borderRadius: 14,
-    paddingVertical: 17,
-    alignItems: 'center',
-  },
-  homeBtnText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
 });

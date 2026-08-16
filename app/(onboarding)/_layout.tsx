@@ -56,6 +56,7 @@ export default function OnboardingLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="goal" />
       <Stack.Screen name="fitness-level" />
+      <Stack.Screen name="abilities" />
       <Stack.Screen name="equipment" />
       <Stack.Screen name="schedule" />
       <Stack.Screen name="diet" />
