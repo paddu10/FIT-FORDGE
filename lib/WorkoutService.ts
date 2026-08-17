@@ -5,6 +5,8 @@ export type DailyWorkoutWithDetails = {
   scheduled_date: string;
   status: string;
   is_rest_day: boolean;
+  original_scheduled_date: string | null;
+  is_rescheduled: boolean;
   actual_duration_minutes: number | null;
   workouts: {
     id: string;
@@ -26,6 +28,8 @@ export type DailyWorkoutWithDetails = {
       muscle_group: string | null;
       equipment: string | null;
       difficulty: string | null;
+      instructions: string | null;
+      duration_seconds: number | null;
     } | null;
   }[];
 };
@@ -41,6 +45,8 @@ export async function getTodayWorkout(userId: string, localDateStr: string): Pro
       scheduled_date,
       status,
       is_rest_day,
+      original_scheduled_date,
+      is_rescheduled,
       actual_duration_minutes,
       workouts (
         id,
@@ -61,7 +67,9 @@ export async function getTodayWorkout(userId: string, localDateStr: string): Pro
           name,
           muscle_group,
           equipment,
-          difficulty
+          difficulty,
+          instructions,
+          duration_seconds
         )
       )
     `)
@@ -119,7 +127,9 @@ export async function getWeekSchedule(userId: string, startDateStr: string): Pro
           name,
           muscle_group,
           equipment,
-          difficulty
+          difficulty,
+          instructions,
+          duration_seconds
         )
       )
     `)

@@ -1,13 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView,
-  TouchableOpacity, ActivityIndicator,
+  TouchableOpacity, ActivityIndicator, ImageBackground
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Flame, Moon, ChevronRight } from 'lucide-react-native';
 import { getTodayWorkout, getWeekSchedule, getMissedWorkouts, DailyWorkoutWithDetails } from '../../lib/WorkoutService';
-import { rescheduleMissedWorkout } from '../../lib/WorkoutEngine';
+import { generateFutureSchedule, rescheduleMissedWorkout } from '../../lib/WorkoutEngine';
 
 function getCategoryMeta(name: string | null | undefined) {
   const defaultMeta = { label: name || 'Custom Workout', icon: '💪', color: '#ccff00' };
@@ -59,11 +59,26 @@ export default function WorkoutScreen() {
         monday.setDate(today.getDate() - dayOfWeek);
         const startOfWeekStr = toLocalDateStr(monday);
 
-        const [todayWorkout, weekWorkouts, missed] = await Promise.all([
+        let [todayWorkout, weekWorkouts, missed] = await Promise.all([
           getTodayWorkout(user.id, todayStr),
           getWeekSchedule(user.id, startOfWeekStr),
           getMissedWorkouts(user.id, todayStr)
         ]);
+
+        // AUTO-HEALING: If no workouts exist for this week, generate them now.
+        const hasWorkoutsThisWeek = weekWorkouts.some(d => d.status !== 'upcoming' && d.status !== 'missed');
+        if (!hasWorkoutsThisWeek) {
+          console.log('[WorkoutScreen] No workouts found for this week. Auto-generating...');
+          await generateFutureSchedule(user.id, todayStr, 14);
+          
+          // Re-fetch
+          const [newToday, newWeek] = await Promise.all([
+            getTodayWorkout(user.id, todayStr),
+            getWeekSchedule(user.id, startOfWeekStr)
+          ]);
+          todayWorkout = newToday;
+          weekWorkouts = newWeek;
+        }
 
         setTodayPlan(todayWorkout);
         if (missed.length > 0) {
@@ -155,12 +170,18 @@ export default function WorkoutScreen() {
   });
   
   const todayLocalStr = toLocalDateStr(new Date());
-  const previewExercises = todayPlan?.daily_workout_exercises.slice(0, 3) || [];
+  const previewExercises = todayPlan?.daily_workout_exercises || [];
   const totalExercises = todayPlan?.daily_workout_exercises.length || 0;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+    <ImageBackground 
+      source={require('../../assets/fit_forge_dashboard_bg.jpg')}
+      style={styles.bgWrapper}
+      imageStyle={styles.bgImage}
+      resizeMode="cover"
+    >
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         {/* ── Missed Workout Alert ── */}
         {missedWorkout && (
@@ -202,7 +223,7 @@ export default function WorkoutScreen() {
               <View style={{ flex: 1, marginLeft: 14 }}>
                 <Text style={styles.todayCardLabel}>{todayMeta.label}</Text>
                 <Text style={styles.todayCardMeta}>
-                  {todayPlan.workouts?.duration_minutes || 45} mins · {totalExercises} exercises
+                  ~{todayPlan.actual_duration_minutes || todayPlan.workouts?.duration_minutes || 45} mins · {totalExercises} exercises · ~{Math.round((todayPlan.actual_duration_minutes || todayPlan.workouts?.duration_minutes || 45) * 6.5)} kcal
                 </Text>
               </View>
               <Flame size={22} color="#F59E0B" />
@@ -211,16 +232,18 @@ export default function WorkoutScreen() {
             {/* Exercise preview rows */}
             <View style={styles.previewList}>
               {previewExercises.map((dwe, i) => (
-                <View key={dwe.id} style={styles.previewRow}>
-                  <Text style={styles.previewNum}>{String(i + 1).padStart(2, '0')}</Text>
-                  <Text style={styles.previewIcon}>{'💪'}</Text>
-                  <Text style={styles.previewName} numberOfLines={1}>{dwe.exercises?.name || 'Exercise'}</Text>
-                  <Text style={styles.previewSets}>{dwe.sets} × {dwe.reps || dwe.rest_duration_seconds + 's'}</Text>
+                <View key={dwe.id} style={styles.previewRowContainer}>
+                  <View style={styles.previewRow}>
+                    <Text style={styles.previewNum}>{String(i + 1).padStart(2, '0')}</Text>
+                    <Text style={styles.previewIcon}>{'💪'}</Text>
+                    <Text style={styles.previewName} numberOfLines={1}>{dwe.exercises?.name || 'Exercise'}</Text>
+                    <Text style={styles.previewSets}>{dwe.sets} × {dwe.reps || dwe.rest_duration_seconds + 's'}</Text>
+                  </View>
+                  {(dwe.exercises as any)?.instructions && (
+                    <Text style={styles.previewInstructions}>{(dwe.exercises as any).instructions}</Text>
+                  )}
                 </View>
               ))}
-              {totalExercises > 3 && (
-                <Text style={styles.moreText}>+ {totalExercises - 3} more exercises</Text>
-              )}
             </View>
 
             {/* Start CTA */}
@@ -262,7 +285,7 @@ export default function WorkoutScreen() {
                   {dayName}
                 </Text>
                 <Text style={styles.dayChipIcon}>
-                  {dp.is_rest_day ? '😴' : meta.icon}
+                  {dp.status === 'missed' ? '⚠️' : dp.is_rest_day ? '😴' : meta.icon}
                 </Text>
                 {isToday && <View style={styles.todayDot} />}
               </View>
@@ -284,7 +307,11 @@ export default function WorkoutScreen() {
                   <Text style={[styles.scheduleDayName, isToday && styles.scheduleDayToday]}>
                     {dayName}
                   </Text>
-                  {dp.is_rest_day ? (
+                  {dp.status === 'missed' ? (
+                    <View style={[styles.scheduleRestBadge, { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)' }]}>
+                      <Text style={[styles.scheduleRestText, { color: '#F87171' }]}>Missed</Text>
+                    </View>
+                  ) : dp.is_rest_day ? (
                     <View style={styles.scheduleRestBadge}>
                       <Text style={styles.scheduleRestText}>Rest</Text>
                     </View>
@@ -292,10 +319,27 @@ export default function WorkoutScreen() {
                     <View style={styles.scheduleWorkoutBadge}>
                       <Text style={styles.scheduleWorkoutIcon}>{meta.icon}</Text>
                       <Text style={styles.scheduleWorkoutLabel}>{meta.label}</Text>
+                      {dp.is_rescheduled && (
+                        <View style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 }}>
+                          <Text style={{ color: '#FCD34D', fontSize: 10, fontWeight: '700' }}>RESCHEDULED</Text>
+                        </View>
+                      )}
                     </View>
                   )}
                   {isToday && <Text style={styles.todayTag}>TODAY</Text>}
                 </View>
+                
+                {/* Weekly Check-up Details */}
+                {!dp.is_rest_day && dp.daily_workout_exercises && dp.daily_workout_exercises.length > 0 && (
+                  <View style={styles.scheduleDetails}>
+                    {(dp.daily_workout_exercises as any).map((ex: any) => (
+                      <Text key={ex.id} style={styles.scheduleExerciseText}>
+                        • {ex.exercises?.name} <Text style={styles.scheduleExerciseMeta}>({ex.sets} × {ex.reps || (ex.rest_duration_seconds + 's')})</Text>
+                      </Text>
+                    ))}
+                  </View>
+                )}
+
                 {i < weekPlan.length - 1 && <View style={styles.scheduleDivider} />}
               </View>
             );
@@ -303,13 +347,24 @@ export default function WorkoutScreen() {
         </View>
 
         <View style={{ height: 40 }} />
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#08090C' },
+  bgWrapper: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+  },
+  bgImage: {
+    opacity: 0.25,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
   center: { justifyContent: 'center', alignItems: 'center' },
   scroll: { padding: 20, paddingBottom: 48 },
 
@@ -371,20 +426,13 @@ const styles = StyleSheet.create({
   todayCardMeta: { fontSize: 13, color: '#6B7280', marginTop: 3 },
 
   previewList: { gap: 10 },
-  previewRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0F1115',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    gap: 10,
-  },
-  previewNum: { color: '#4B5563', fontSize: 11, fontWeight: '900', width: 22 },
-  previewIcon: { fontSize: 18 },
-  previewName: { flex: 1, color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  previewSets: { color: '#6B7280', fontSize: 13, fontWeight: '600' },
-  moreText: { color: '#6B7280', fontSize: 13, textAlign: 'center', marginTop: 4 },
+  previewRowContainer: { marginBottom: 12 },
+  previewRow: { flexDirection: 'row', alignItems: 'center' },
+  previewNum: { width: 24, fontSize: 13, color: '#4B5563', fontWeight: '700' },
+  previewIcon: { fontSize: 16, marginRight: 8 },
+  previewName: { flex: 1, color: '#F3F4F6', fontSize: 14, fontWeight: '600' },
+  previewSets: { color: '#9CA3AF', fontSize: 13, fontWeight: '600' },
+  previewInstructions: { paddingLeft: 32, paddingRight: 10, marginTop: 4, color: '#6B7280', fontSize: 12, fontStyle: 'italic', lineHeight: 16 },
 
   startBtn: {
     backgroundColor: '#ccff00',
@@ -453,29 +501,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   scheduleRowToday: { backgroundColor: 'rgba(204,255,0,0.04)' },
-  scheduleDayName: { color: '#9CA3AF', fontSize: 14, fontWeight: '600', width: 36 },
-  scheduleDayToday: { color: '#ccff00', fontWeight: '800' },
-  scheduleRestBadge: {
-    backgroundColor: '#1A1D24',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  scheduleRestText: { color: '#4B5563', fontSize: 12, fontWeight: '600' },
-  scheduleWorkoutBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flex: 1,
-  },
-  scheduleWorkoutIcon: { fontSize: 16 },
-  scheduleWorkoutLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  todayTag: {
-    color: '#ccff00',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginLeft: 'auto',
-  },
-  scheduleDivider: { height: 1, backgroundColor: '#1E2430', marginHorizontal: 18 },
+  scheduleDayName: { fontSize: 16, fontWeight: '700', color: '#9CA3AF', width: 50 },
+  scheduleDayToday: { color: '#ccff00' },
+  scheduleRestBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: '#1F2937' },
+  scheduleRestText: { fontSize: 13, color: '#9CA3AF', fontWeight: '600' },
+  scheduleWorkoutBadge: { flexDirection: 'row', alignItems: 'center' },
+  scheduleWorkoutIcon: { fontSize: 16, marginRight: 6 },
+  scheduleWorkoutLabel: { fontSize: 15, color: '#FFF', fontWeight: '600' },
+  todayTag: { marginLeft: 'auto', fontSize: 10, fontWeight: '800', color: '#000', backgroundColor: '#ccff00', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' },
+  scheduleDivider: { height: 1, backgroundColor: '#374151', marginVertical: 12 },
+  scheduleDetails: { paddingLeft: 50, paddingBottom: 8 },
+  scheduleExerciseText: { fontSize: 13, color: '#D1D5DB', marginBottom: 4 },
+  scheduleExerciseMeta: { color: '#9CA3AF' },
 });

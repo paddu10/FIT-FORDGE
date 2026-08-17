@@ -10,6 +10,7 @@ import { WeeklyActivity, WeekData, DayStatus } from '../../components/WeeklyActi
 import { CalisthenicsProgress, SkillProgress } from '../../components/CalisthenicsProgress';
 import { getDailyQuote } from '../../data/quotes';
 import { getTodayWorkout } from '../../lib/WorkoutService';
+import { generateFutureSchedule } from '../../lib/WorkoutEngine';
 import { theme } from '../../constants/theme';
 import Animated, { FadeIn, FadeInDown, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, interpolate, Extrapolation } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
@@ -60,7 +61,20 @@ export default function HomeScreen() {
         setTotalWorkouts(count || 0);
 
         // 4. Generate Weekly Activity
-        const wData = await generateWeekData(user.id, todayStr);
+        let wData = await generateWeekData(user.id, todayStr);
+        
+        // AUTO-HEALING: If no workouts exist for this week, generate them now.
+        const hasWorkoutsThisWeek = wData.some(d => d.status !== 'upcoming' && d.status !== 'missed');
+        if (!hasWorkoutsThisWeek) {
+          console.log('[HomeScreen] No workouts found for this week. Auto-generating...');
+          await generateFutureSchedule(user.id, todayStr, 14);
+          
+          // Re-fetch today's workout and week data after generation
+          const newWorkoutData = await getTodayWorkout(user.id, todayStr);
+          if (newWorkoutData) setDailyWorkout(newWorkoutData);
+          wData = await generateWeekData(user.id, todayStr);
+        }
+
         setWeekData(wData);
 
         // 5. Calculate Calisthenics Progress
@@ -192,7 +206,7 @@ export default function HomeScreen() {
 
   return (
     <ImageBackground 
-      source={require('../../assets/Gemini_Generated_Image_nypg02nypg02nypg.png')}
+      source={require('../../assets/fit_forge_dashboard_bg.jpg')}
       style={styles.bgWrapper}
       imageStyle={styles.bgImage}
       resizeMode="cover"

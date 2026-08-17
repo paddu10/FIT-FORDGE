@@ -1,52 +1,152 @@
 import { supabase } from './supabase';
 
+// --- Types ---
+interface Exercise {
+  id: string;
+  name: string;
+  muscle_group: string;
+  equipment: string;
+  difficulty: string;
+  default_sets: number;
+  default_reps: number;
+  duration_seconds: number;
+  rest_duration_seconds: number;
+}
+
+interface Profile {
+  id: string;
+  training_days_pref: number[];
+  equipment: string[];
+  fitness_level: string;
+  goal: string;
+  training_duration: number; // minutes
+}
+
+// --- Progression Service ---
+async function calculateNextTarget(userId: string, exerciseId: string, baseSets: number, baseReps: number | null, baseDuration: number | null) {
+  // Fetch the most recent completed performance for this exercise
+  const { data: pastPerformances } = await supabase
+    .from('daily_workout_exercises')
+    .select('sets, reps, rest_duration_seconds, completed_sets, daily_workouts!inner(status, scheduled_date)')
+    .eq('exercise_id', exerciseId)
+    .eq('daily_workouts.user_id', userId)
+    .eq('daily_workouts.status', 'completed')
+    .order('daily_workouts(scheduled_date)', { ascending: false })
+    .limit(1);
+
+  if (!pastPerformances || pastPerformances.length === 0) {
+    // No past performance, return baseline
+    return { sets: baseSets, reps: baseReps, duration_seconds: baseDuration };
+  }
+
+  const last = pastPerformances[0];
+  
+  // Progression Logic
+  let targetSets = last.sets || baseSets;
+  let targetReps = last.reps || baseReps;
+  let targetDuration = baseDuration;
+
+  // If they completed all sets last time
+  if (last.completed_sets >= targetSets) {
+    if (targetReps !== null) {
+      targetReps += 1; // progressive overload by adding 1 rep
+      if (targetReps > 15) {
+        // If reps get too high, cap them and maybe they need a harder variation (handled by level filtering)
+        targetReps = 15;
+      }
+    } else if (targetDuration !== null && targetDuration > 0) {
+      targetDuration += 5; // progressive overload by adding 5 seconds
+    }
+  }
+
+  return { sets: targetSets, reps: targetReps, duration_seconds: targetDuration };
+}
+
+// --- Main Engine ---
 export async function generateFutureSchedule(userId: string, startDateStr: string, numDays: number = 7) {
   try {
-    const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    if (!profile) throw new Error('No profile');
+    const { data: profileRow } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    if (!profileRow) throw new Error('No profile');
 
-    const prefDays: number[] = profile.training_days_pref || [1, 3, 5];
-    const trainingDaysCount = prefDays.length;
+    const profile: Profile = {
+      id: profileRow.id,
+      training_days_pref: profileRow.training_days_pref || [1, 3, 5],
+      equipment: profileRow.equipment || [],
+      fitness_level: (profileRow.fitness_level || 'beginner').toLowerCase(),
+      goal: (profileRow.goal || 'general fitness').toLowerCase(),
+      training_duration: profileRow.training_duration || 45,
+    };
 
-    // Fetch all exercises
+    const trainingDaysCount = profile.training_days_pref.length;
+
+    // 1. Fetch all exercises
     const { data: dbExercises } = await supabase.from('exercises').select('*');
-    
-    let allExercises = dbExercises;
-    
-    // Fallback if DB is empty or missing seed data
-    if (!allExercises || allExercises.length === 0) {
-      console.warn('[WorkoutEngine] No exercises found in DB. Using fallback data.');
-      allExercises = [
-        { id: 'fb-1', name: 'Push-up', muscle_group: 'Chest', equipment: 'None', default_sets: 3, default_reps: 15 },
-        { id: 'fb-2', name: 'Pull-up', muscle_group: 'Back', equipment: 'Pull-up bar', default_sets: 3, default_reps: 8 },
-        { id: 'fb-3', name: 'Squat', muscle_group: 'Legs', equipment: 'None', default_sets: 3, default_reps: 20 },
-        { id: 'fb-4', name: 'Plank', muscle_group: 'Core', equipment: 'None', default_sets: 3, default_reps: 60 },
-        { id: 'fb-5', name: 'Pike Push-up', muscle_group: 'Shoulders', equipment: 'None', default_sets: 3, default_reps: 10 }
-      ];
+    if (!dbExercises || dbExercises.length === 0) {
+      console.warn('[WorkoutEngine] No exercises in DB. Aborting generation.');
+      return;
     }
 
-    let availableExercises = allExercises;
-    if (!profile.equipment || profile.equipment.length === 0 || profile.equipment.includes('none')) {
-      availableExercises = allExercises.filter(e => e.equipment === 'None' || !e.equipment);
+    // 2. Filter by Equipment
+    const equipmentList = profile.equipment.map(e => e.toLowerCase());
+    const hasNoneOnly = equipmentList.length === 0 || (equipmentList.length === 1 && equipmentList.includes('none'));
+    
+    let availableExercises = dbExercises.filter(ex => {
+      const exEq = (ex.equipment || 'none').toLowerCase();
+      if (hasNoneOnly) return exEq === 'none' || exEq === 'bodyweight';
+      if (exEq === 'none' || exEq === 'bodyweight') return true;
+      return equipmentList.some(userEq => exEq.includes(userEq) || userEq.includes(exEq));
+    });
+
+    // 3. Filter by Fitness Level
+    availableExercises = availableExercises.filter(ex => {
+      const diff = (ex.difficulty || 'beginner').toLowerCase();
+      if (profile.fitness_level === 'beginner') return diff === 'beginner';
+      if (profile.fitness_level === 'intermediate') return diff === 'beginner' || diff === 'intermediate';
+      return true; // advanced can do all
+    });
+
+    if (availableExercises.length === 0) {
+      console.warn('[WorkoutEngine] Filtering removed all exercises. Falling back to all DB exercises.');
+      availableExercises = dbExercises; 
     }
 
-    // Determine basic split rotation based on frequency
+    // 4. Goal-Based Parameters
+    let globalSets = 3;
+    let globalReps = 10;
+    let globalRest = 60;
+
+    if (profile.goal.includes('strength')) {
+      globalSets = 4;
+      globalReps = 5;
+      globalRest = 120;
+    } else if (profile.goal.includes('muscle') || profile.goal.includes('gain')) {
+      globalSets = 3;
+      globalReps = 10;
+      globalRest = 90;
+    } else if (profile.goal.includes('fat') || profile.goal.includes('loss')) {
+      globalSets = 3;
+      globalReps = 15;
+      globalRest = 45;
+    }
+
+    // 5. Weekly Splits
     let splits: string[] = [];
-    if (trainingDaysCount >= 5) {
-      splits = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms'];
+    if (trainingDaysCount <= 2) {
+      splits = ['Full Body', 'Full Body'];
+    } else if (trainingDaysCount === 3) {
+      splits = ['Upper Body', 'Lower Body', 'Full Body'];
     } else if (trainingDaysCount === 4) {
       splits = ['Upper Body', 'Lower Body', 'Upper Body', 'Lower Body'];
+    } else if (trainingDaysCount === 5) {
+      splits = ['Push', 'Pull', 'Legs', 'Upper Body', 'Lower Body'];
     } else {
-      splits = ['Full Body', 'Full Body', 'Full Body'];
+      splits = ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Legs'];
     }
 
     let splitIndex = 0;
 
     const dateParts = startDateStr.split('-');
     const startDate = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
-
-    console.log('[WorkoutEngine] Generating schedule...');
-    console.log('[WorkoutEngine] Selected Workout Days:', prefDays);
 
     for (let i = 0; i < numDays; i++) {
       const currentDate = new Date(startDate);
@@ -58,62 +158,94 @@ export async function generateFutureSchedule(userId: string, startDateStr: strin
       ].join('-');
       const dayOfWeek = currentDate.getDay(); // 0 = Sun, 1 = Mon
 
-      console.log(`[WorkoutEngine] Checking ${dateStr} (Local day ${dayOfWeek})`);
-
-      // Check if workout exists
-      const { data: existing } = await supabase.from('daily_workouts')
-        .select('id, status')
-        .eq('user_id', userId)
-        .eq('scheduled_date', dateStr)
-        .maybeSingle();
-
+      // Existing check
+      const { data: existing } = await supabase.from('daily_workouts').select('id, status').eq('user_id', userId).eq('scheduled_date', dateStr).maybeSingle();
       if (existing) {
-        // If it exists, and is completed, we just skip over it
         if (existing.status === 'completed') {
-          // If it was a training day, increment splitIndex to keep rotation intact
-          if (prefDays.includes(dayOfWeek)) {
-            splitIndex++;
-          }
+          if (profile.training_days_pref.includes(dayOfWeek)) splitIndex++;
           continue;
         } else {
-          // If it's pending, we should probably delete it and regenerate to match new preferences, 
-          // or just leave it. Let's delete pending so we can cleanly overwrite.
           await supabase.from('daily_workouts').delete().eq('id', existing.id);
         }
       }
 
-      // Is it a rest day based on user preferences?
-      if (!prefDays.includes(dayOfWeek)) {
-        console.log(`[WorkoutEngine] -> Marking ${dateStr} as Rest Day`);
-        await supabase.from('daily_workouts').insert({
-          user_id: userId,
-          scheduled_date: dateStr,
-          status: 'pending',
-          is_rest_day: true
-        });
+      if (!profile.training_days_pref.includes(dayOfWeek)) {
+        await supabase.from('daily_workouts').insert({ user_id: userId, scheduled_date: dateStr, status: 'pending', is_rest_day: true });
         continue;
       }
 
-      console.log(`[WorkoutEngine] -> Scheduling Workout on ${dateStr}`);
-      // It is a training day
       const targetMuscleGroup = splits[splitIndex % splits.length];
       splitIndex++;
 
-      // Select exercises
-      let selectedExercises: any[] = [];
-      const fillExercises = availableExercises.filter(e => 
-        (targetMuscleGroup === 'Full Body' || e.muscle_group === targetMuscleGroup || targetMuscleGroup === 'Upper Body' && ['Chest', 'Back', 'Shoulders', 'Arms'].includes(e.muscle_group) || targetMuscleGroup === 'Lower Body' && ['Legs', 'Glutes'].includes(e.muscle_group))
-      );
+      // 6. Select Exercises Intelligently (Balance & Duration)
+      const targetDurationSeconds = profile.training_duration * 60;
+      let currentWorkoutDuration = 0; // Warmup (5m) + Cooldown (5m) = 600s
+      let basePadding = 600;
+      currentWorkoutDuration += basePadding;
+
+      const selectedExercises: any[] = [];
+      const usedExerciseNames = new Set<string>();
+
+      // Helper to find a matching exercise
+      const pickExercise = (patterns: string[]) => {
+        const candidates = availableExercises.filter(ex => 
+          !usedExerciseNames.has(ex.name) && 
+          patterns.some(p => (ex.muscle_group || '').toLowerCase().includes(p))
+        );
+        if (candidates.length === 0) return null;
+        const choice = candidates[Math.floor(Math.random() * candidates.length)];
+        usedExerciseNames.add(choice.name);
+        return choice;
+      };
+
+      // Define pattern priorities based on split
+      let patternsToFill: string[][] = [];
+      const tg = targetMuscleGroup.toLowerCase();
       
-      // Basic selection for demo
-      selectedExercises = fillExercises.slice(0, 5);
-      
-      // If no matching exercises found, fallback
-      if (selectedExercises.length === 0) {
-        selectedExercises = availableExercises.slice(0, 5);
+      if (tg.includes('full')) {
+        patternsToFill = [['legs', 'quads'], ['chest', 'push'], ['back', 'pull'], ['glutes', 'hamstrings'], ['core']];
+      } else if (tg.includes('upper') || tg === 'push' || tg === 'pull') {
+        if (tg === 'push') patternsToFill = [['chest'], ['shoulders'], ['triceps'], ['chest', 'core']];
+        else if (tg === 'pull') patternsToFill = [['back'], ['biceps'], ['back'], ['core']];
+        else patternsToFill = [['chest'], ['back'], ['shoulders'], ['arms'], ['core']];
+      } else if (tg.includes('lower') || tg === 'legs') {
+        patternsToFill = [['legs', 'quads'], ['glutes', 'hamstrings'], ['calves'], ['core']];
+      } else {
+        patternsToFill = [['chest', 'push'], ['back', 'pull'], ['legs', 'quads', 'hamstrings'], ['core'], ['shoulders', 'arms']]; // Generic balanced
       }
 
-      // 1. Get or Create the workout template for this muscle group
+      // Fill basic patterns
+      for (const p of patternsToFill) {
+        const ex = pickExercise(p);
+        if (ex) {
+          selectedExercises.push(ex);
+          // Estimate duration: Sets * (Reps * 3s + Rest)
+          const isTimed = ex.duration_seconds && ex.duration_seconds > 0;
+          const timePerSet = isTimed ? ex.duration_seconds : (globalReps * 3);
+          currentWorkoutDuration += (globalSets * (timePerSet + globalRest));
+        }
+      }
+
+      // Fill until duration is reached (or up to max 10 exercises to prevent infinite loops)
+      let attempt = 0;
+      while (currentWorkoutDuration < targetDurationSeconds - 300 && selectedExercises.length < 10 && attempt < 10) {
+        attempt++;
+        const p = patternsToFill[attempt % patternsToFill.length];
+        const ex = pickExercise(p);
+        if (ex) {
+          selectedExercises.push(ex);
+          const isTimed = ex.duration_seconds && ex.duration_seconds > 0;
+          const timePerSet = isTimed ? ex.duration_seconds : (globalReps * 3);
+          currentWorkoutDuration += (globalSets * (timePerSet + globalRest));
+        }
+      }
+
+      if (selectedExercises.length === 0) {
+        // Ultimate fallback if absolutely no exercises matched the patterns
+        selectedExercises.push(...availableExercises.slice(0, 4));
+      }
+
+      // 7. Get or Create Workout Template
       let workoutId: string | null = null;
       try {
         const { data: existingWorkoutTemplate } = await supabase
@@ -126,56 +258,64 @@ export async function generateFutureSchedule(userId: string, startDateStr: strin
         if (existingWorkoutTemplate) {
           workoutId = existingWorkoutTemplate.id;
         } else {
+          const generatedName = `${targetMuscleGroup} ${profile.goal.includes('strength') ? 'Strength' : 'Session'}`;
           const { data: newWorkoutTemplate, error: tplErr } = await supabase
             .from('workouts')
             .insert({
-              name: targetMuscleGroup,
-              description: `Generated ${targetMuscleGroup} workout`,
-              goal: profile.goal || 'general',
-              fitness_level: profile.fitness_level || 'beginner',
-              duration_minutes: 45
+              name: generatedName,
+              description: `Personalized ${targetMuscleGroup} workout`,
+              goal: profile.goal,
+              fitness_level: profile.fitness_level,
+              duration_minutes: Math.round(currentWorkoutDuration / 60)
             })
             .select('id')
             .single();
 
-          if (!tplErr && newWorkoutTemplate) {
-            workoutId = newWorkoutTemplate.id;
-          }
+          if (!tplErr && newWorkoutTemplate) workoutId = newWorkoutTemplate.id;
         }
       } catch (err) {
         console.error('Error creating workout template:', err);
       }
 
-      // Create workout
+      // 8. Create Daily Workout
       const { data: newWorkout, error: nwErr } = await supabase.from('daily_workouts').insert({
         user_id: userId,
         workout_id: workoutId,
         scheduled_date: dateStr,
         status: 'pending',
-        is_rest_day: false
+        is_rest_day: false,
+        actual_duration_minutes: Math.round(currentWorkoutDuration / 60)
       }).select().single();
 
-      if (nwErr || !newWorkout) {
-        console.error('Failed to create daily_workout', nwErr);
-        continue;
-      }
+      if (nwErr || !newWorkout) continue;
 
-      // If we are using fallback data with non-uuid IDs, we can't insert into daily_workout_exercises
-      // because exercise_id is a UUID referencing public.exercises.
-      // So we only insert if the ID is a valid UUID (meaning it came from the DB).
-      const validExercises = selectedExercises.filter(ex => ex.id && ex.id.length > 10);
-      
-      if (validExercises.length > 0) {
-        const exerciseRecords = validExercises.map((ex, idx) => ({
+      // 9. Process Exercises and apply Progression
+      const exerciseRecords = [];
+      for (let idx = 0; idx < selectedExercises.length; idx++) {
+        const ex = selectedExercises[idx];
+        const isTimed = ex.duration_seconds && ex.duration_seconds > 0;
+        
+        // Progression Service
+        const target = await calculateNextTarget(
+          userId, 
+          ex.id, 
+          ex.default_sets || globalSets, 
+          isTimed ? null : (ex.default_reps || globalReps),
+          isTimed ? ex.duration_seconds : null
+        );
+
+        exerciseRecords.push({
           daily_workout_id: newWorkout.id,
           exercise_id: ex.id,
           sort_order: idx,
-          sets: ex.default_sets || 3,
-          reps: ex.default_reps || 10,
-          rest_duration_seconds: ex.rest_duration_seconds || 60,
+          sets: target.sets,
+          reps: target.reps,
+          rest_duration_seconds: ex.rest_duration_seconds || globalRest,
           completed_sets: 0
-        }));
+        });
+      }
 
+      if (exerciseRecords.length > 0) {
         const { error: dweErr } = await supabase.from('daily_workout_exercises').insert(exerciseRecords);
         if (dweErr) console.error('Failed to insert exercises', dweErr);
       }
@@ -185,31 +325,25 @@ export async function generateFutureSchedule(userId: string, startDateStr: strin
   }
 }
 
-/**
- * Reschedules a specifically missed workout to the next available valid rest day,
- * preserving all other future scheduled workouts.
- */
 export async function rescheduleMissedWorkout(userId: string, missedWorkoutId: string, searchFromDateStr: string) {
   try {
-    console.log(`[WorkoutEngine] Rescheduling missed workout ${missedWorkoutId} from ${searchFromDateStr}`);
-
-    // Fetch the missed workout
-    const { data: missedWorkout } = await supabase.from('daily_workouts')
+    const { data: missedWorkout } = await supabase
+      .from('daily_workouts')
       .select('*')
       .eq('id', missedWorkoutId)
       .eq('user_id', userId)
       .single();
 
-    if (!missedWorkout || missedWorkout.status !== 'pending' || missedWorkout.is_rest_day) {
-      console.log('[WorkoutEngine] Workout is not a valid missed workout.');
-      return;
-    }
+    if (!missedWorkout || missedWorkout.status !== 'pending' || missedWorkout.is_rest_day) return;
 
+    // We search from today onwards.
     const dateParts = searchFromDateStr.split('-');
     const searchDate = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
 
-    // Scan forward up to 14 days to find the next valid rest day
-    for (let i = 0; i < 14; i++) {
+    let targetDateStr: string | null = null;
+
+    // Search for the next available day up to 21 days ahead
+    for (let i = 0; i < 21; i++) {
       const candidateDate = new Date(searchDate);
       candidateDate.setDate(searchDate.getDate() + i);
       const candidateStr = [
@@ -218,38 +352,53 @@ export async function rescheduleMissedWorkout(userId: string, missedWorkoutId: s
         String(candidateDate.getDate()).padStart(2, '0')
       ].join('-');
 
-      // Check what is currently scheduled on candidate date
-      const { data: existingOnCandidate } = await supabase.from('daily_workouts')
+      // We need to check if there is a REAL workout on this candidate date
+      const { data: existingOnCandidate } = await supabase
+        .from('daily_workouts')
         .select('*')
         .eq('user_id', userId)
         .eq('scheduled_date', candidateStr)
-        .maybeSingle();
+        .neq('status', 'missed'); // Ignore missed placeholders when checking availability
 
-      // We only convert a rest day into this workout.
-      // If there's no existing record, or if it's explicitly a pending rest day:
-      if (!existingOnCandidate || (existingOnCandidate.is_rest_day && existingOnCandidate.status === 'pending')) {
-        console.log(`[WorkoutEngine] Found valid slot on ${candidateStr}. Moving missed workout.`);
-        
-        // If there was a rest day placeholder, we can delete it or overwrite it
-        if (existingOnCandidate) {
-          await supabase.from('daily_workouts').delete().eq('id', existingOnCandidate.id);
+      const hasRealWorkout = existingOnCandidate && existingOnCandidate.some(w => !w.is_rest_day);
+
+      if (!hasRealWorkout) {
+        // Candidate is available (it's either empty, or only has a rest day / missed placeholder)
+        targetDateStr = candidateStr;
+
+        // If there is a rest day placeholder, we can delete it
+        const restDay = existingOnCandidate?.find(w => w.is_rest_day && w.status === 'pending');
+        if (restDay) {
+          await supabase.from('daily_workouts').delete().eq('id', restDay.id);
         }
-
-        // Update the missed workout's date
-        await supabase.from('daily_workouts')
-          .update({
-            scheduled_date: candidateStr,
-            status: 'pending' // ensure it remains pending
-          })
-          .eq('id', missedWorkoutId);
-          
-        console.log(`[WorkoutEngine] Successfully rescheduled to ${candidateStr}.`);
-        return;
+        break;
       }
     }
-    
-    console.log('[WorkoutEngine] Could not find an available slot within the next 14 days.');
-  } catch (err) {
-    console.error('[WorkoutEngine] Error rescheduling workout:', err);
+
+    if (!targetDateStr) {
+      console.warn('Could not find an available day to reschedule within the next 21 days.');
+      return;
+    }
+
+    // Insert a "missed" placeholder on the original date so history shows it was missed
+    await supabase.from('daily_workouts').insert({
+      user_id: userId,
+      workout_id: missedWorkout.workout_id,
+      scheduled_date: missedWorkout.scheduled_date,
+      status: 'missed',
+      is_rest_day: false,
+      original_scheduled_date: missedWorkout.original_scheduled_date || missedWorkout.scheduled_date
+    });
+
+    // Move the actual exact workout to the new target date
+    await supabase.from('daily_workouts').update({ 
+      scheduled_date: targetDateStr, 
+      status: 'rescheduled',
+      original_scheduled_date: missedWorkout.original_scheduled_date || missedWorkout.scheduled_date,
+      is_rescheduled: true
+    }).eq('id', missedWorkout.id);
+
+  } catch (error) {
+    console.error('Error rescheduling:', error);
   }
 }

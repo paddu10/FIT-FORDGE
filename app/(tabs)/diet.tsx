@@ -46,13 +46,13 @@ export default function DietScreen() {
     let cals = 0;
     let protein = 0;
     currentMeals.forEach(m => {
-      if (m.status === 'eaten' && m.meals) {
-        cals += m.meals.calories || 0;
-        protein += m.meals.protein || 0;
+      if (m.status === 'eaten' && m.food_items) {
+        cals += (m.food_items.calories || 0) * (m.quantity || 1);
+        protein += (m.food_items.protein || 0) * (m.quantity || 1);
       }
     });
-    setConsumedCalories(cals);
-    setConsumedProtein(protein);
+    setConsumedCalories(Math.round(cals));
+    setConsumedProtein(Math.round(protein));
   };
 
   const toggleMeal = async (planId: string, currentStatus: string) => {
@@ -60,7 +60,7 @@ export default function DietScreen() {
     
     try {
       const { error } = await supabase
-        .from('daily_meal_plans')
+        .from('diet_plans')
         .update({ status: newStatus })
         .eq('id', planId);
 
@@ -129,50 +129,66 @@ export default function DietScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>TODAY'S MEALS</Text>
           
-          {meals.map(plan => (
-            <View key={plan.id} style={styles.mealCard}>
-              <View style={styles.mealHeader}>
-                <View>
-                  <Text style={styles.mealType}>{plan.meal_type.toUpperCase()}</Text>
-                  <Text style={styles.mealName}>{plan.meals?.name || 'Meal'}</Text>
-                </View>
-                <TouchableOpacity onPress={() => toggleMeal(plan.id, plan.status)}>
-                  {plan.status === 'eaten' ? (
-                    <CheckCircle2 size={32} color="#22C55E" />
-                  ) : (
-                    <Circle size={32} color="#4B5563" />
-                  )}
-                </TouchableOpacity>
-              </View>
-              
-              <View style={styles.mealStats}>
-                <View style={styles.statItem}>
-                  <Text style={styles.statLabel}>CALORIES</Text>
-                  <Text style={styles.statValue}>{plan.meals?.calories || 0}</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Text style={styles.statLabel}>PROTEIN</Text>
-                  <Text style={styles.statValue}>{plan.meals?.protein || 0}g</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Text style={styles.statLabel}>CARBS</Text>
-                  <Text style={styles.statValue}>{plan.meals?.carbs || 0}g</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Text style={styles.statLabel}>FAT</Text>
-                  <Text style={styles.statValue}>{plan.meals?.fat || 0}g</Text>
-                </View>
-              </View>
-              
-              <View style={styles.mealDetails}>
-                <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 6}}>
-                  <Utensils size={14} color="#9CA3AF" />
-                  <Text style={styles.detailTitle}> INGREDIENTS</Text>
-                </View>
-                <Text style={styles.detailText}>{plan.meals?.ingredients || 'No data'}</Text>
-              </View>
+          {meals.length === 0 && (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <Text style={{ color: '#9CA3AF', textAlign: 'center' }}>We couldn't find enough foods matching your diet preference. Please check your food_items database.</Text>
             </View>
-          ))}
+          )}
+
+          {meals.map(plan => {
+            const food = plan.food_items;
+            if (!food) return null;
+            return (
+              <View key={plan.id} style={styles.mealCard}>
+                <View style={styles.mealHeader}>
+                  <View style={{flex: 1}}>
+                    <Text style={styles.mealType}>{plan.meal_type.toUpperCase()}</Text>
+                    <Text style={styles.mealName}>{food.food_name || 'Meal'}</Text>
+                    <Text style={{ color: '#64748B', fontSize: 12, marginTop: 4 }}>
+                      {plan.quantity} {plan.unit} • {food.serving_size || '1 serving'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => toggleMeal(plan.id, plan.status)}>
+                    {plan.status === 'eaten' ? (
+                      <CheckCircle2 size={32} color="#22C55E" />
+                    ) : (
+                      <Circle size={32} color="#4B5563" />
+                    )}
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={styles.mealStats}>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>CALORIES</Text>
+                    <Text style={styles.statValue}>{Math.round((food.calories || 0) * plan.quantity)}</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>PROTEIN</Text>
+                    <Text style={styles.statValue}>{Math.round((food.protein || 0) * plan.quantity)}g</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>CARBS</Text>
+                    <Text style={styles.statValue}>{Math.round((food.carbs || 0) * plan.quantity)}g</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>FAT</Text>
+                    <Text style={styles.statValue}>{Math.round((food.fat || 0) * plan.quantity)}g</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.mealDetails}>
+                  {food.description ? (
+                    <Text style={[styles.detailText, {marginBottom: 8}]}>{food.description}</Text>
+                  ) : null}
+                  <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 6}}>
+                    <Utensils size={14} color="#9CA3AF" />
+                    <Text style={styles.detailTitle}> BENEFITS</Text>
+                  </View>
+                  <Text style={styles.detailText}>{food.health_benefits || 'Good for your health and performance.'}</Text>
+                </View>
+              </View>
+            );
+          })}
           
         </View>
         <View style={{height: 100}} />
