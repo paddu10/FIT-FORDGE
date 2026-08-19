@@ -125,7 +125,7 @@ export default function CompleteScreen() {
   const router = useRouter();
 
   const cat = (category || 'abs') as MuscleCategory;
-  const meta = CATEGORY_META[cat];
+  const meta = CATEGORY_META[cat] ?? { label: category || 'Workout', icon: '🏋️', color: '#ccff00' };
   const motivation = MOTIVATION[cat] ?? 'Every rep counts. You did the work. 🏆';
   const prs = newPrs ? JSON.parse(newPrs) : [{ name: 'Push-up', value: '25 reps' }]; // Dummy PR for demo if none passed
 
