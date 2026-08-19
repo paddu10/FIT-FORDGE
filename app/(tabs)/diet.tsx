@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, ImageBackground } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { generateDailyDiet } from '../../lib/DietEngine';
@@ -103,8 +104,18 @@ export default function DietScreen() {
   const remainingProtein = Math.max(0, targetProtein - consumedProtein);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+    <ImageBackground 
+      source={require('../../assets/Dietplan_img.jpg')}
+      style={styles.bgWrapper}
+      imageStyle={styles.bgImage}
+      resizeMode="cover"
+    >
+      <LinearGradient
+        colors={['rgba(8,9,12,0.4)', 'rgba(8,9,12,0.8)', 'rgba(8,9,12,1)']}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Diet Plan</Text>
@@ -193,14 +204,22 @@ export default function DietScreen() {
         </View>
         <View style={{height: 100}} />
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  bgWrapper: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  bgImage: {
+    opacity: 0.65,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#08090C',
+    backgroundColor: 'transparent',
   },
   centerContent: {
     justifyContent: 'center',

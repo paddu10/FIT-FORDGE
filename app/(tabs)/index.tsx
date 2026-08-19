@@ -14,6 +14,7 @@ import { generateFutureSchedule } from '../../lib/WorkoutEngine';
 import { theme } from '../../constants/theme';
 import Animated, { FadeIn, FadeInDown, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, interpolate, Extrapolation } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
@@ -206,11 +207,15 @@ export default function HomeScreen() {
 
   return (
     <ImageBackground 
-      source={require('../../assets/fit_forge_dashboard_bg.jpg')}
+      source={require('../../assets/Home_img1.jpg')}
       style={styles.bgWrapper}
       imageStyle={styles.bgImage}
       resizeMode="cover"
     >
+      <LinearGradient
+        colors={['rgba(9,9,11,0.4)', 'rgba(9,9,11,0.8)', 'rgba(9,9,11,1)']}
+        style={StyleSheet.absoluteFillObject}
+      />
       <SafeAreaView style={styles.container}>
         
         {/* STICKY BLUR HEADER */}
@@ -333,10 +338,10 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   bgWrapper: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#000', // Solid black base
   },
   bgImage: {
-    opacity: 0.15,
+    opacity: 0.65, // Increased visibility
   },
   container: {
     flex: 1,

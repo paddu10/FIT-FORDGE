@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, SafeAreaView, ScrollView,
   TouchableOpacity, ActivityIndicator, ImageBackground
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Flame, Moon, ChevronRight } from 'lucide-react-native';
@@ -175,11 +176,15 @@ export default function WorkoutScreen() {
 
   return (
     <ImageBackground 
-      source={require('../../assets/fit_forge_dashboard_bg.jpg')}
+      source={require('../../assets/workout_img1.jpg')}
       style={styles.bgWrapper}
       imageStyle={styles.bgImage}
       resizeMode="cover"
     >
+      <LinearGradient
+        colors={['rgba(8,9,12,0.4)', 'rgba(8,9,12,0.8)', 'rgba(8,9,12,1)']}
+        style={StyleSheet.absoluteFillObject}
+      />
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
@@ -356,10 +361,10 @@ export default function WorkoutScreen() {
 const styles = StyleSheet.create({
   bgWrapper: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: '#000',
   },
   bgImage: {
-    opacity: 0.25,
+    opacity: 0.65,
   },
   container: {
     flex: 1,

@@ -38,34 +38,53 @@ export async function generateDailyDiet(userId: string) {
     const multiplier = (profile.training_days || 3) >= 4 ? 1.55 : 1.375;
     let tdee = bmr * multiplier;
 
-    // Goal adjustment
-    const goal = (profile.goal || 'maintenance').toLowerCase();
+    // Goal adjustment — match exact goal values from profiles
+    const goal = (profile.goal || 'maintain').toLowerCase();
     let calorieTarget = tdee;
-    if (goal.includes('loss')) calorieTarget -= 500;
-    if (goal.includes('gain') || goal.includes('muscle')) calorieTarget += 300;
+    if (goal === 'lose_weight') calorieTarget -= 500;
+    if (goal === 'build_muscle') calorieTarget += 300;
+    if (goal === 'get_stronger') calorieTarget += 200;
 
-    // Protein Target: approx 1.8g to 2.2g per kg of bodyweight
-    let proteinTarget = (profile.weight || 70) * (goal.includes('muscle') ? 2.2 : 1.8);
+    // Protein Target
+    let proteinTarget = (profile.weight || 70) * (goal === 'build_muscle' ? 2.2 : 1.8);
 
-    // Fetch food matching preference
-    const pref = (profile.diet_preference || 'vegetarian').toLowerCase();
+    // Fetch food — no filtering if non-vegetarian, filter only for veg/vegan
+    const pref = (profile.diet_preference || 'non_vegetarian').toLowerCase();
     let query = supabase.from('food_items').select('*');
 
     if (pref === 'vegan') {
       query = query.eq('vegan', true);
-    } else if (pref === 'vegetarian') {
-      query = query.eq('vegetarian', true);
-    } else if (pref === 'eggetarian') {
-      // Eggetarian: We assume food_items might have an 'eggetarian' tag or we just pull vegetarian + eggs.
-      // If we don't have an exact eggetarian flag, we'll pull vegetarian.
+    } else if (pref === 'vegetarian' || pref === 'eggetarian') {
       query = query.eq('vegetarian', true);
     }
-    // Non-vegetarian has no restrictions
+    // non_vegetarian: no filter — show all foods
 
     const { data: foods, error: foodsError } = await query;
     if (foodsError || !foods || foods.length === 0) {
-      console.warn('No foods found matching preference:', pref);
-      return [];
+      // Last resort fallback — fetch everything without any filter
+      const { data: allFoods } = await supabase.from('food_items').select('*');
+      if (!allFoods || allFoods.length === 0) {
+        console.warn('No foods found at all — check food_items table and RLS.');
+        return [];
+      }
+      // Use all foods
+      const pickFoodFallback = (category: string) => {
+        const c = allFoods.filter(f => (f.category || '').toLowerCase().includes(category.toLowerCase()));
+        return c.length > 0 ? c[Math.floor(Math.random() * c.length)] : allFoods[Math.floor(Math.random() * allFoods.length)];
+      };
+      const plansToInsertFallback = [
+        { user_id: userId, plan_date: today, food_id: pickFoodFallback('breakfast').id, meal_type: 'Breakfast', status: 'pending', quantity: 1, unit: 'serving' },
+        { user_id: userId, plan_date: today, food_id: pickFoodFallback('lunch').id, meal_type: 'Lunch', status: 'pending', quantity: 1, unit: 'serving' },
+        { user_id: userId, plan_date: today, food_id: pickFoodFallback('snack').id, meal_type: 'Snack', status: 'pending', quantity: 1, unit: 'serving' },
+        { user_id: userId, plan_date: today, food_id: pickFoodFallback('dinner').id, meal_type: 'Dinner', status: 'pending', quantity: 1, unit: 'serving' },
+      ];
+      await supabase.from('diet_plans').insert(plansToInsertFallback);
+      const { data: fallbackPlan } = await supabase
+        .from('diet_plans')
+        .select('id, status, meal_type, quantity, unit, plan_date, food_items (*)')
+        .eq('user_id', userId)
+        .eq('plan_date', today);
+      return fallbackPlan || [];
     }
 
     // Helper to pick random food by category
@@ -82,10 +101,10 @@ export async function generateDailyDiet(userId: string) {
 
     // For simplicity, we assign 1 serving each. In a full system, you'd balance quantities to hit macros exactly.
     const plansToInsert = [
-      { user_id: userId, plan_date: today, food_id: breakfast.id, meal_type: 'Breakfast', status: 'pending', quantity: 1 },
-      { user_id: userId, plan_date: today, food_id: lunch.id, meal_type: 'Lunch', status: 'pending', quantity: 1 },
-      { user_id: userId, plan_date: today, food_id: snack.id, meal_type: 'Snack', status: 'pending', quantity: 1 },
-      { user_id: userId, plan_date: today, food_id: dinner.id, meal_type: 'Dinner', status: 'pending', quantity: 1 },
+      { user_id: userId, plan_date: today, food_id: breakfast.id, meal_type: 'Breakfast', status: 'pending', quantity: 1, unit: 'serving' },
+      { user_id: userId, plan_date: today, food_id: lunch.id, meal_type: 'Lunch', status: 'pending', quantity: 1, unit: 'serving' },
+      { user_id: userId, plan_date: today, food_id: snack.id, meal_type: 'Snack', status: 'pending', quantity: 1, unit: 'serving' },
+      { user_id: userId, plan_date: today, food_id: dinner.id, meal_type: 'Dinner', status: 'pending', quantity: 1, unit: 'serving' },
     ];
 
     await supabase.from('diet_plans').insert(plansToInsert);
@@ -99,7 +118,7 @@ export async function generateDailyDiet(userId: string) {
     // Fetch again to get full join data
     const { data: newPlan } = await supabase
       .from('diet_plans')
-      .select('id, status, meal_type, quantity, plan_date, food_items (*)')
+      .select('id, status, meal_type, quantity, unit, plan_date, food_items (*)')
       .eq('user_id', userId)
       .eq('plan_date', today);
 

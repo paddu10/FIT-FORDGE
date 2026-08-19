@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, Alert, ImageBackground } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { getBmiCategory } from '../../data/workouts';
-import { User, Flame, Scale, Ruler, Target, LogOut, ChevronRight, Activity, Zap } from 'lucide-react-native';
+import { User, Flame, Scale, Ruler, Target, LogOut, ChevronRight, Activity, Zap, Pencil } from 'lucide-react-native';
 
 type Profile = {
   name: string;
@@ -62,35 +63,43 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [computedBmi, setComputedBmi] = useState<number | null>(null);
 
-  useEffect(() => {
-    async function loadProfile() {
-      if (!user) return;
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-      if (data) {
-        // If BMI not in DB but we have height/weight, calculate it now and save it
-        let bmi = data.bmi;
-        if (!bmi && data.height && data.weight) {
-          const hM = data.height / 100;
-          bmi = data.weight / (hM * hM);
-          // Patch the database so it's saved for next time
-          await supabase
-            .from('profiles')
-            .update({ bmi: Number(bmi.toFixed(1)) })
-            .eq('id', user.id);
+      async function loadProfile() {
+        if (!user) return;
+        setLoading(true);
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (cancelled) return;
+
+        if (data) {
+          let bmi = data.bmi;
+          if (!bmi && data.height && data.weight) {
+            const hM = data.height / 100;
+            bmi = data.weight / (hM * hM);
+            await supabase
+              .from('profiles')
+              .update({ bmi: Number(bmi.toFixed(1)) })
+              .eq('id', user.id);
+          }
+          setComputedBmi(bmi ? Number(bmi) : null);
+          setProfile({ ...data, bmi });
         }
-        setComputedBmi(bmi ? Number(bmi) : null);
-        setProfile({ ...data, bmi });
+        setLoading(false);
       }
-      setLoading(false);
-    }
-    loadProfile();
-  }, [user]);
+
+      loadProfile();
+
+      // Cleanup: prevent state updates if screen unfocused mid-fetch
+      return () => { cancelled = true; };
+    }, [user])
+  );
 
   const handleLogout = async () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -116,10 +125,20 @@ export default function ProfileScreen() {
   const bmiColor = bmi ? getBmiColor(bmi) : '#9CA3AF';
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
+    <ImageBackground 
+      source={require('../../assets/profile_img3.jpg')}
+      style={styles.bgWrapper}
+      imageStyle={styles.bgImage}
+      resizeMode="cover"
+    >
+      <LinearGradient
+        colors={['rgba(8,9,12,0.4)', 'rgba(8,9,12,0.8)', 'rgba(8,9,12,1)']}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Header */}
+          <View style={styles.header}>
           <View style={styles.avatarCircle}>
             <User size={36} color="#ccff00" />
           </View>
@@ -226,13 +245,29 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Edit body stats shortcut */}
+        <TouchableOpacity
+          style={styles.editBodyBtn}
+          onPress={() => router.push('/profile/edit')}
+          activeOpacity={0.8}
+        >
+          <View style={styles.editBodyLeft}>
+            <Pencil size={18} color="#ccff00" />
+            <View>
+              <Text style={styles.editBodyTitle}>Edit Body Stats</Text>
+              <Text style={styles.editBodySub}>Update weight & height · recalculates BMI</Text>
+            </View>
+          </View>
+          <ChevronRight size={18} color="#ccff00" />
+        </TouchableOpacity>
+
         {/* Re-do onboarding */}
         <TouchableOpacity
           style={styles.editButton}
           onPress={() => router.push('/(onboarding)')}
           activeOpacity={0.8}
         >
-          <Text style={styles.editButtonText}>Update Profile & Recalculate</Text>
+          <Text style={styles.editButtonText}>Full Profile Recalculate</Text>
           <ChevronRight size={20} color="#ccff00" />
         </TouchableOpacity>
 
@@ -241,13 +276,16 @@ export default function ProfileScreen() {
           <LogOut size={20} color="#EF4444" />
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#08090C' },
+  bgWrapper: { flex: 1, backgroundColor: '#000' },
+  bgImage: { opacity: 0.65 },
+  container: { flex: 1, backgroundColor: 'transparent' },
   center: { justifyContent: 'center', alignItems: 'center' },
   scrollContent: { padding: 20, paddingBottom: 100 },
   header: { alignItems: 'center', marginBottom: 28, marginTop: 8 },
@@ -317,14 +355,25 @@ const styles = StyleSheet.create({
   infoValue: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   divider: { height: 1, backgroundColor: '#1E2430' },
 
-  editButton: {
+  editBodyBtn: {
     backgroundColor: 'rgba(204,255,0,0.08)',
     borderWidth: 1, borderColor: 'rgba(204,255,0,0.3)',
     borderRadius: 14, paddingVertical: 16, paddingHorizontal: 20,
     flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 12,
+  },
+  editBodyLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
+  editBodyTitle: { color: '#ccff00', fontWeight: 'bold', fontSize: 15 },
+  editBodySub: { color: '#9CA3AF', fontSize: 12, marginTop: 2 },
+
+  editButton: {
+    backgroundColor: '#161921',
+    borderWidth: 1, borderColor: '#2D3748',
+    borderRadius: 14, paddingVertical: 16, paddingHorizontal: 20,
+    flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginBottom: 14,
   },
-  editButtonText: { color: '#ccff00', fontWeight: 'bold', fontSize: 15 },
+  editButtonText: { color: '#9CA3AF', fontWeight: 'bold', fontSize: 15 },
 
   logoutButton: {
     backgroundColor: 'rgba(239,68,68,0.08)',

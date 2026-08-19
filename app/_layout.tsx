@@ -52,6 +52,7 @@ function RootLayoutNav() {
         <Stack.Screen name="exercises/[category]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="workout/session" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="workout/complete" options={{ headerShown: false, presentation: 'modal', gestureEnabled: false }} />
+        <Stack.Screen name="profile/edit" options={{ headerShown: false }} />
       </Stack>
     </>
   );
