@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, SafeAreaView, ImageBackground, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Link } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { Dumbbell, User, Mail, Phone, Lock } from 'lucide-react-native';
+import { AppScreen } from '../../components/AppScreen';
 
 export default function SignupScreen() {
   const [fullName, setFullName] = useState('');
@@ -46,152 +47,128 @@ export default function SignupScreen() {
   }
 
   return (
-    <ImageBackground 
-      source={require('../../assets/fitness_bg.png')} 
-      style={styles.backgroundImage}
+    <AppScreen
+      bgImage={require('../../assets/fitness_bg.png')}
+      bgGradient
+      scrollable
+      contentContainerStyle={styles.scrollContent}
     >
-      <View style={styles.overlay}>
-        <SafeAreaView style={styles.safeArea}>
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.keyboardView}
-          >
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-              <View style={styles.logoContainer}>
-                <Dumbbell size={32} color="#ccff00" />
-                <Text style={styles.logoText}>FITFORGE</Text>
-              </View>
-              
-              <Text style={styles.tagline}>[ BE UNSTOPPABLE ]</Text>
-
-              <View style={styles.heroTextContainer}>
-                <Text style={styles.heroText}>START YOUR</Text>
-                <Text style={styles.heroText}>JOURNEY</Text>
-                <Text style={styles.heroText}>TODAY</Text>
-              </View>
-
-              <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>SIGN UP</Text>
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>NEW HERE</Text>
-                  </View>
-                </View>
-                <Text style={styles.cardSubtitle}>Create your lifetime profile in seconds</Text>
-
-                <View style={styles.form}>
-                  {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-                  {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Full Name</Text>
-                    <View style={styles.inputContainer}>
-                      <User color="#64748B" size={20} style={styles.inputIcon} />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="e.g. Marcus Vane"
-                        placeholderTextColor="#64748B"
-                        onChangeText={setFullName}
-                        value={fullName}
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Gmail / Email Address</Text>
-                    <View style={styles.inputContainer}>
-                      <Mail color="#64748B" size={20} style={styles.inputIcon} />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="marcus@gmail.com"
-                        placeholderTextColor="#64748B"
-                        onChangeText={setEmail}
-                        value={email}
-                        autoCapitalize="none"
-                        keyboardType="email-address"
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Mobile Number</Text>
-                    <View style={styles.inputContainer}>
-                      <Phone color="#64748B" size={20} style={styles.inputIcon} />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="+1 (555) 000-0000"
-                        placeholderTextColor="#64748B"
-                        onChangeText={setPhone}
-                        value={phone}
-                        keyboardType="phone-pad"
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Password</Text>
-                    <View style={styles.inputContainer}>
-                      <Lock color="#64748B" size={20} style={styles.inputIcon} />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="••••••••"
-                        placeholderTextColor="#64748B"
-                        onChangeText={setPassword}
-                        value={password}
-                        secureTextEntry={true}
-                        autoCapitalize="none"
-                      />
-                    </View>
-                  </View>
-
-                  <TouchableOpacity 
-                    style={[styles.button, loading && styles.buttonDisabled]} 
-                    onPress={signUpWithEmail}
-                    disabled={loading}
-                  >
-                    <Text style={styles.buttonText}>
-                      {loading ? 'CREATING ACCOUNT...' : 'SIGN UP & START ➔'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <View style={styles.footer}>
-                    <Text style={styles.footerText}>Secure 256-bit SSL encrypted connection</Text>
-                  </View>
-
-                  <View style={styles.footerLinks}>
-                    <Text style={styles.footerText}>Already have an account? </Text>
-                    <Link href="/(auth)/login" asChild>
-                      <TouchableOpacity>
-                        <Text style={styles.linkText}>Sign In</Text>
-                      </TouchableOpacity>
-                    </Link>
-                  </View>
-                </View>
-              </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
+      <View style={styles.logoContainer}>
+        <Dumbbell size={32} color="#ccff00" />
+        <Text style={styles.logoText}>FITFORGE</Text>
       </View>
-    </ImageBackground>
+      
+      <Text style={styles.tagline}>[ BE UNSTOPPABLE ]</Text>
+
+      <View style={styles.heroTextContainer}>
+        <Text style={styles.heroText}>START YOUR</Text>
+        <Text style={styles.heroText}>JOURNEY</Text>
+        <Text style={styles.heroText}>TODAY</Text>
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>SIGN UP</Text>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>NEW HERE</Text>
+          </View>
+        </View>
+        <Text style={styles.cardSubtitle}>Create your lifetime profile in seconds</Text>
+
+        <View style={styles.form}>
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+          {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Full Name</Text>
+            <View style={styles.inputContainer}>
+              <User color="#64748B" size={20} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Marcus Vane"
+                placeholderTextColor="#64748B"
+                onChangeText={setFullName}
+                value={fullName}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Gmail / Email Address</Text>
+            <View style={styles.inputContainer}>
+              <Mail color="#64748B" size={20} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="marcus@gmail.com"
+                placeholderTextColor="#64748B"
+                onChangeText={setEmail}
+                value={email}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Mobile Number</Text>
+            <View style={styles.inputContainer}>
+              <Phone color="#64748B" size={20} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="+1 (555) 000-0000"
+                placeholderTextColor="#64748B"
+                onChangeText={setPhone}
+                value={phone}
+                keyboardType="phone-pad"
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.inputContainer}>
+              <Lock color="#64748B" size={20} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="••••••••"
+                placeholderTextColor="#64748B"
+                onChangeText={setPassword}
+                value={password}
+                secureTextEntry={true}
+                autoCapitalize="none"
+              />
+            </View>
+          </View>
+
+          <TouchableOpacity 
+            style={[styles.button, loading && styles.buttonDisabled]} 
+            onPress={signUpWithEmail}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>
+              {loading ? 'CREATING ACCOUNT...' : 'SIGN UP & START ➔'}
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Secure 256-bit SSL encrypted connection</Text>
+          </View>
+
+          <View style={styles.footerLinks}>
+            <Text style={styles.footerText}>Already have an account? </Text>
+            <Link href="/(auth)/login" asChild>
+              <TouchableOpacity>
+                <Text style={styles.linkText}>Sign In</Text>
+              </TouchableOpacity>
+            </Link>
+          </View>
+        </View>
+      </View>
+    </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(8,9,12,0.85)',
-  },
-  safeArea: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
   scrollContent: {
     flexGrow: 1,
     padding: 24,

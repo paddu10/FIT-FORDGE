@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView,
-  TextInput, TouchableOpacity, Alert, StatusBar, ActivityIndicator
+  View, Text, StyleSheet, ScrollView,
+  TextInput, TouchableOpacity, Alert, ActivityIndicator
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, SkipForward, Check, PlayCircle } from 'lucide-react-native';
@@ -18,6 +18,9 @@ import { ExerciseAnimation } from '../../components/ExerciseAnimation';
 import { PremiumButton } from '../../components/PremiumButton';
 import { theme } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
+import { AppScreen } from '../../components/AppScreen';
+import { SPACING } from '../../constants/Layout';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ── Animated SVG circle for the rest timer ring ──
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -35,6 +38,7 @@ type SetState = {
 export default function SessionScreen() {
   const { workoutId } = useLocalSearchParams<{ workoutId: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(true);
   const [exercises, setExercises] = useState<any[]>([]);
@@ -130,9 +134,11 @@ export default function SessionScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color="#ccff00" />
-      </View>
+      <AppScreen hideBottomSafe>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#ccff00" />
+        </View>
+      </AppScreen>
     );
   }
 
@@ -261,7 +267,7 @@ export default function SessionScreen() {
   // ── Empty guard ──────────────────────────────────
   if (exercises.length === 0) {
     return (
-      <SafeAreaView style={[styles.container]}>
+      <AppScreen hideBottomSafe>
         <View style={styles.center}>
           <PlayCircle color={theme.colors.textMuted} size={48} />
           <Text style={styles.emptyText}>No exercises in this workout.</Text>
@@ -272,187 +278,173 @@ export default function SessionScreen() {
             style={{marginTop: theme.spacing.md}}
           />
         </View>
-      </SafeAreaView>
+      </AppScreen>
     );
   }
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#08090C" />
-      <SafeAreaView style={styles.container}>
+    <AppScreen hideBottomSafe scrollable={false}>
+      {/* ── Header ── */}
+      <View style={[styles.header, { marginTop: SPACING.top }]}>
+        <TouchableOpacity onPress={handleBack} style={styles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <ArrowLeft color="#FFFFFF" size={24} />
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerPill}>
+            {meta.icon}  {meta.label}  ·  {exIdx + 1} / {exercises.length}
+          </Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>{currentEx.name}</Text>
+        </View>
+      </View>
 
-        {/* ── Header ── */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <ArrowLeft color="#FFFFFF" size={22} />
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerPill}>
-              {meta.icon}  {meta.label}  ·  {exIdx + 1} / {exercises.length}
-            </Text>
-            <Text style={styles.headerTitle} numberOfLines={1}>{currentEx.name}</Text>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* ── Exercise card ── */}
+        <Animated.View style={[styles.exCard, cardAnimStyle]}>
+          <ExerciseAnimation placeholderTitle={currentEx.name} />
+          <Text style={styles.exDesc}>{currentEx.description}</Text>
+          <View style={styles.exStats}>
+            <View style={styles.exStat}>
+              <Text style={styles.exStatVal}>{currentEx.sets}</Text>
+              <Text style={styles.exStatLbl}>SETS</Text>
+            </View>
+            <View style={styles.exStatDiv} />
+            <View style={styles.exStat}>
+              <Text style={styles.exStatVal}>{currentEx.isTimed ? `${currentEx.reps}s` : currentEx.reps}</Text>
+              <Text style={styles.exStatLbl}>{currentEx.isTimed ? 'TIME' : 'REPS'}</Text>
+            </View>
+            <View style={styles.exStatDiv} />
+            <View style={styles.exStat}>
+              <Text style={styles.exStatVal}>{currentEx.restSeconds}s</Text>
+              <Text style={styles.exStatLbl}>REST</Text>
+            </View>
           </View>
+        </Animated.View>
+
+        {/* ── Rest Timer ── */}
+        {restActive && (
+          <View style={styles.timerCard}>
+            <Text style={styles.timerLabel}>REST TIMER</Text>
+            <View style={styles.timerRingWrap}>
+              <Svg width={120} height={120} style={styles.timerSvg}>
+                {/* Track */}
+                <Circle cx={60} cy={60} r={RING_R} stroke="rgba(255,255,255,0.07)" strokeWidth={RING_STROKE} fill="none" />
+                {/* Animated progress ring */}
+                <AnimatedCircle cx={60} cy={60} r={RING_R} stroke="#ccff00" strokeWidth={RING_STROKE} fill="none" strokeDasharray={RING_CIRC} animatedProps={animatedRingProps} strokeLinecap="round" transform="rotate(-90 60 60)" />
+              </Svg>
+              <View style={styles.timerOverlay}>
+                <Text style={styles.timerCount}>{restTimeLeft}</Text>
+                <Text style={styles.timerSec}>SEC</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.skipBtn} onPress={skipRest} activeOpacity={0.7}>
+              <SkipForward color="#6B7280" size={16} />
+              <Text style={styles.skipText}>SKIP REST</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── Sets list ── */}
+        <View style={styles.setsCard}>
+          <View style={styles.setTableHead}>
+            <View style={styles.setColSet}><Text style={styles.setHeadTxt}>SET</Text></View>
+            <View style={styles.setColInput}><Text style={[styles.setHeadTxt, { textAlign: 'center' }]}>KG</Text></View>
+            <View style={styles.setColInput}><Text style={[styles.setHeadTxt, { textAlign: 'center' }]}>{currentEx.isTimed ? 'SEC' : 'REPS'}</Text></View>
+            <View style={styles.setColCheck}><Text style={[styles.setHeadTxt, { textAlign: 'center' }]}>DONE</Text></View>
+          </View>
+
+          {currentSets.map((s, i) => (
+            <View key={i} style={[styles.setRow, s.completed && styles.setRowDone]}>
+              <View style={[styles.setCol, styles.setColSet]}>
+                <Text style={[styles.setNum, s.completed && styles.setNumDone]}>{i + 1}</Text>
+              </View>
+              <View style={[styles.setCol, styles.setColInput]}>
+                <TextInput
+                  style={[styles.setInput, s.completed && styles.setInputDone]}
+                  keyboardType="numeric"
+                  placeholder="-"
+                  placeholderTextColor="#4B5563"
+                  value={s.weight}
+                  onChangeText={(val) => updateSet(i, 'weight', val)}
+                  editable={!s.completed}
+                  selectTextOnFocus
+                />
+              </View>
+              <View style={[styles.setCol, styles.setColInput]}>
+                <TextInput
+                  style={[styles.setInput, s.completed && styles.setInputDone]}
+                  keyboardType="numeric"
+                  value={s.reps}
+                  onChangeText={(val) => updateSet(i, 'reps', val)}
+                  editable={!s.completed}
+                  selectTextOnFocus
+                />
+              </View>
+              <View style={[styles.setCol, styles.setColCheck]}>
+                <TouchableOpacity
+                  style={[styles.checkBtn, s.completed && styles.checkBtnDone]}
+                  onPress={() => toggleSet(i)}
+                  activeOpacity={0.7}
+                >
+                  {s.completed && <Check color="#000" size={18} strokeWidth={3} />}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+
+      {/* ── Footer ── */}
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+        <View style={styles.progressRow}>
+          {exercises.map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.progDot,
+                i === exIdx && styles.progDotActive,
+                i < exIdx && styles.progDotDone,
+              ]}
+            />
+          ))}
         </View>
 
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+        <TouchableOpacity
+          style={[styles.nextBtn, !allCurrentDone && styles.nextBtnDisabled]}
+          onPress={handleNext}
+          disabled={!allCurrentDone && !isLastEx}
+          activeOpacity={0.8}
         >
-          {/* ── Exercise card ── */}
-          <Animated.View style={[styles.exCard, cardAnimStyle]}>
-            <ExerciseAnimation placeholderTitle={currentEx.name} />
-            <Text style={styles.exDesc}>{currentEx.description}</Text>
-            <View style={styles.exStats}>
-              <View style={styles.exStat}>
-                <Text style={styles.exStatVal}>{currentEx.sets}</Text>
-                <Text style={styles.exStatLbl}>SETS</Text>
-              </View>
-              <View style={styles.exStatDiv} />
-              <View style={styles.exStat}>
-                <Text style={styles.exStatVal}>{currentEx.isTimed ? `${currentEx.reps}s` : currentEx.reps}</Text>
-                <Text style={styles.exStatLbl}>{currentEx.isTimed ? 'TIME' : 'REPS'}</Text>
-              </View>
-              <View style={styles.exStatDiv} />
-              <View style={styles.exStat}>
-                <Text style={styles.exStatVal}>{currentEx.restSeconds}s</Text>
-                <Text style={styles.exStatLbl}>REST</Text>
-              </View>
-            </View>
-          </Animated.View>
-
-          {/* ── Rest Timer ── */}
-          {restActive && (
-            <View style={styles.timerCard}>
-              <Text style={styles.timerLabel}>REST TIMER</Text>
-              <View style={styles.timerRingWrap}>
-                <Svg width={120} height={120} style={styles.timerSvg}>
-                  {/* Track */}
-                  <Circle cx={60} cy={60} r={RING_R} stroke="rgba(255,255,255,0.07)" strokeWidth={RING_STROKE} fill="none" />
-                  {/* Animated progress ring */}
-                  <AnimatedCircle cx={60} cy={60} r={RING_R} stroke="#ccff00" strokeWidth={RING_STROKE} fill="none" strokeDasharray={RING_CIRC} animatedProps={animatedRingProps} strokeLinecap="round" transform="rotate(-90 60 60)" />
-                </Svg>
-                <View style={styles.timerOverlay}>
-                  <Text style={styles.timerCount}>{restTimeLeft}</Text>
-                  <Text style={styles.timerSec}>SEC</Text>
-                </View>
-              </View>
-              <TouchableOpacity style={styles.skipBtn} onPress={skipRest} activeOpacity={0.7}>
-                <SkipForward color="#6B7280" size={16} />
-                <Text style={styles.skipText}>SKIP REST</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* ── Sets list ── */}
-          <View style={styles.setsCard}>
-            <View style={styles.setTableHead}>
-              <View style={styles.setColSet}><Text style={styles.setHeadTxt}>SET</Text></View>
-              <View style={styles.setColInput}><Text style={[styles.setHeadTxt, { textAlign: 'center' }]}>KG</Text></View>
-              <View style={styles.setColInput}><Text style={[styles.setHeadTxt, { textAlign: 'center' }]}>{currentEx.isTimed ? 'SEC' : 'REPS'}</Text></View>
-              <View style={styles.setColCheck}><Text style={[styles.setHeadTxt, { textAlign: 'center' }]}>DONE</Text></View>
-            </View>
-
-            {currentSets.map((s, i) => (
-              <View key={i} style={[styles.setRow, s.completed && styles.setRowDone]}>
-                <View style={[styles.setCol, styles.setColSet]}>
-                  <Text style={[styles.setNum, s.completed && styles.setNumDone]}>{i + 1}</Text>
-                </View>
-                <View style={[styles.setCol, styles.setColInput]}>
-                  <TextInput
-                    style={[styles.setInput, s.completed && styles.setInputDone]}
-                    keyboardType="numeric"
-                    placeholder="-"
-                    placeholderTextColor="#4B5563"
-                    value={s.weight}
-                    onChangeText={(val) => updateSet(i, 'weight', val)}
-                    editable={!s.completed}
-                    selectTextOnFocus
-                  />
-                </View>
-                <View style={[styles.setCol, styles.setColInput]}>
-                  <TextInput
-                    style={[styles.setInput, s.completed && styles.setInputDone]}
-                    keyboardType="numeric"
-                    value={s.reps}
-                    onChangeText={(val) => updateSet(i, 'reps', val)}
-                    editable={!s.completed}
-                    selectTextOnFocus
-                  />
-                </View>
-                <View style={[styles.setCol, styles.setColCheck]}>
-                  <TouchableOpacity
-                    style={[styles.checkBtn, s.completed && styles.checkBtnDone]}
-                    onPress={() => toggleSet(i)}
-                    activeOpacity={0.7}
-                  >
-                    {s.completed && <Check color="#000" size={18} strokeWidth={3} />}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </View>
-        </ScrollView>
-
-        {/* ── Footer ── */}
-        <View style={styles.footer}>
-          <View style={styles.progressRow}>
-            {exercises.map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.progDot,
-                  i === exIdx && styles.progDotActive,
-                  i < exIdx && styles.progDotDone,
-                ]}
-              />
-            ))}
-          </View>
-
-          <TouchableOpacity
-            style={[styles.nextBtn, !allCurrentDone && styles.nextBtnDisabled]}
-            onPress={handleNext}
-            disabled={!allCurrentDone && !isLastEx}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.nextBtnText, !allCurrentDone && { color: '#4B5563' }]}>
-              {isLastEx ? 'FINISH WORKOUT 🏆' : 'NEXT EXERCISE'}
-            </Text>
-          </TouchableOpacity>
-          {!allCurrentDone && !isLastEx && (
-            <Text style={styles.nextHint}>Complete all sets to continue</Text>
-          )}
-        </View>
-
-      </SafeAreaView>
-    </View>
+          <Text style={[styles.nextBtnText, !allCurrentDone && { color: '#4B5563' }]}>
+            {isLastEx ? 'FINISH WORKOUT 🏆' : 'NEXT EXERCISE'}
+          </Text>
+        </TouchableOpacity>
+        {!allCurrentDone && !isLastEx && (
+          <Text style={styles.nextHint}>Complete all sets to continue</Text>
+        )}
+      </View>
+    </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#08090C' },
-  container: { flex: 1 },
-  center: { justifyContent: 'center', alignItems: 'center' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyText: { color: '#6B7280', fontSize: 16, marginTop: 12, fontWeight: '600' },
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1A1D24',
+    paddingHorizontal: SPACING.screenHorizontal,
+    marginBottom: SPACING.headerToContent,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#1A1D24',
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 4,
   },
-  headerCenter: { flex: 1, alignItems: 'center', paddingRight: 40 },
+  headerCenter: { flex: 1, alignItems: 'center', paddingRight: 28 }, // 28 balances the back button
   headerPill: {
     color: '#ccff00',
     backgroundColor: 'rgba(204,255,0,0.1)',
@@ -468,7 +460,7 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', textAlign: 'center' },
 
   scroll: { flex: 1 },
-  scrollContent: { padding: 20, paddingBottom: 40 },
+  scrollContent: { paddingHorizontal: SPACING.screenHorizontal, paddingBottom: 40 },
 
   exCard: { marginBottom: 24 },
   exDesc: { color: '#9CA3AF', fontSize: 15, lineHeight: 22, marginTop: 16, marginBottom: 20 },
@@ -569,7 +561,6 @@ const styles = StyleSheet.create({
 
   footer: {
     padding: 16,
-    paddingBottom: 24,
     borderTopWidth: 1,
     borderTopColor: '#1A1D24',
     backgroundColor: '#08090C',

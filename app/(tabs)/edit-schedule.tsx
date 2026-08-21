@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, Alert } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, ArrowRightLeft } from 'lucide-react-native';
 import { theme } from '../../constants/theme';
+import { AppScreen } from '../../components/AppScreen';
+import { AppHeader } from '../../components/AppHeader';
+import { SPACING } from '../../constants/Layout';
 
 type WorkoutDay = {
   id: string;
@@ -108,7 +110,6 @@ export default function EditScheduleScreen() {
     }
 
     if (!targetDay.is_rest_day && targetDay.id && targetDay.status !== 'completed') {
-      // Conflict
       if (Platform.OS === 'web') {
         const swap = window.confirm(`${targetDay.dayStr} already has a workout. Click OK to Swap them, or Cancel to abort.`);
         if (swap) {
@@ -129,7 +130,6 @@ export default function EditScheduleScreen() {
               text: 'Swap Workouts',
               onPress: async () => {
                 setLoading(true);
-                // Swap scheduled_dates
                 await supabase.from('daily_workouts').update({ scheduled_date: targetDay.scheduled_date }).eq('id', sourceItem.id);
                 await supabase.from('daily_workouts').update({ scheduled_date: sourceItem.scheduled_date }).eq('id', targetDay.id);
                 cancelMove();
@@ -145,7 +145,6 @@ export default function EditScheduleScreen() {
         );
       }
     } else {
-      // Just move it
       setLoading(true);
       await supabase.from('daily_workouts').update({ scheduled_date: targetDay.scheduled_date }).eq('id', sourceItem.id);
       if (targetDay.id) {
@@ -158,81 +157,74 @@ export default function EditScheduleScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator color={theme.colors.accent} />
-      </SafeAreaView>
+      <AppScreen hideBottomSafe>
+        <View style={styles.center}>
+          <ActivityIndicator color={theme.colors.accent} size="large" />
+        </View>
+      </AppScreen>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ChevronLeft color="#FFF" size={24} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{movingId ? 'Select Target Day' : 'Edit Plan'}</Text>
-        <View style={{width: 24}} />
-      </View>
+    <AppScreen 
+      hideBottomSafe
+      scrollable
+      contentContainerStyle={styles.content}
+    >
+      <AppHeader title={movingId ? 'Select Target Day' : 'Edit Plan'} showBack={true} />
 
-      <ScrollView contentContainerStyle={styles.content}>
+      {movingId && (
+        <View style={styles.movingBanner}>
+          <Text style={styles.movingText}>Select a day to move your workout to.</Text>
+          <TouchableOpacity onPress={cancelMove} style={styles.cancelBtn}>
+            <Text style={styles.cancelBtnText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {week.map((item, idx) => {
+        const isMovingSource = item.id === movingId;
+        const name = item.is_rest_day ? 'REST DAY' : (
+          (Array.isArray(item.workouts) ? item.workouts[0]?.name : item.workouts?.name) || 'Workout'
+        );
         
-        {movingId && (
-          <View style={styles.movingBanner}>
-            <Text style={styles.movingText}>Select a day to move your workout to.</Text>
-            <TouchableOpacity onPress={cancelMove} style={styles.cancelBtn}>
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        return (
+          <TouchableOpacity 
+            key={idx} 
+            style={[
+              styles.row, 
+              item.isPast && styles.rowPast,
+              isMovingSource && styles.rowSource,
+              movingId && !isMovingSource && !item.isPast && styles.rowTarget
+            ]}
+            disabled={item.isPast || (!!movingId && item.status === 'completed')}
+            onPress={() => movingId ? confirmMove(item) : undefined}
+          >
+            <View style={styles.dayCol}>
+              <Text style={styles.dayLabel}>{item.dayStr}</Text>
+              {item.status === 'completed' && <Text style={styles.check}>✓</Text>}
+            </View>
+            
+            <View style={styles.infoCol}>
+              <Text style={[styles.workoutName, item.is_rest_day && styles.restName]}>{name}</Text>
+              <Text style={styles.dateLabel}>{item.scheduled_date}</Text>
+            </View>
 
-        {week.map((item, idx) => {
-          const isMovingSource = item.id === movingId;
-          const name = item.is_rest_day ? 'REST DAY' : (
-            (Array.isArray(item.workouts) ? item.workouts[0]?.name : item.workouts?.name) || 'Workout'
-          );
-          
-          return (
-            <TouchableOpacity 
-              key={idx} 
-              style={[
-                styles.row, 
-                item.isPast && styles.rowPast,
-                isMovingSource && styles.rowSource,
-                movingId && !isMovingSource && !item.isPast && styles.rowTarget
-              ]}
-              disabled={item.isPast || (!!movingId && item.status === 'completed')}
-              onPress={() => movingId ? confirmMove(item) : undefined}
-            >
-              <View style={styles.dayCol}>
-                <Text style={styles.dayLabel}>{item.dayStr}</Text>
-                {item.status === 'completed' && <Text style={styles.check}>✓</Text>}
-              </View>
-              
-              <View style={styles.infoCol}>
-                <Text style={[styles.workoutName, item.is_rest_day && styles.restName]}>{name}</Text>
-                <Text style={styles.dateLabel}>{item.scheduled_date}</Text>
-              </View>
-
-              {!movingId && !item.isPast && item.status !== 'completed' && !item.is_rest_day && (
-                <TouchableOpacity style={styles.moveBtn} onPress={() => handleMove(item)}>
-                  <Text style={styles.moveBtnText}>MOVE</Text>
-                </TouchableOpacity>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-
-      </ScrollView>
-    </SafeAreaView>
+            {!movingId && !item.isPast && item.status !== 'completed' && !item.is_rest_day && (
+              <TouchableOpacity style={styles.moveBtn} onPress={() => handleMove(item)}>
+                <Text style={styles.moveBtnText}>MOVE</Text>
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+    </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 },
-  backBtn: { padding: 8, marginLeft: -8 },
-  headerTitle: { color: theme.colors.text, fontSize: 16, fontWeight: 'bold' },
-  content: { padding: 20 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  content: { paddingHorizontal: SPACING.screenHorizontal, paddingBottom: 120 },
   movingBanner: { backgroundColor: 'rgba(204,255,0,0.1)', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.accent, marginBottom: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   movingText: { color: theme.colors.accent, fontSize: 14, fontWeight: 'bold', flex: 1 },
   cancelBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8 },

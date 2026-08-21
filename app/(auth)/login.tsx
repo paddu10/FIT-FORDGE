@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, SafeAreaView, ImageBackground, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { Dumbbell, Mail, Lock, CheckSquare, Square } from 'lucide-react-native';
 import { PremiumButton } from '../../components/PremiumButton';
+import { AppScreen } from '../../components/AppScreen';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -32,140 +33,116 @@ export default function LoginScreen() {
   }
 
   return (
-    <ImageBackground 
-      source={require('../../assets/fitness_bg.png')} 
-      style={styles.backgroundImage}
+    <AppScreen
+      bgImage={require('../../assets/fitness_bg.png')}
+      bgGradient
+      scrollable
+      contentContainerStyle={styles.scrollContent}
     >
-      <View style={styles.overlay}>
-        <SafeAreaView style={styles.safeArea}>
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.keyboardView}
-          >
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-              <View style={styles.logoContainer}>
-                <Dumbbell size={32} color="#ccff00" />
-                <Text style={styles.logoText}>FITFORGE</Text>
-              </View>
-              
-              <Text style={styles.tagline}>[ BE UNSTOPPABLE ]</Text>
-
-              <View style={styles.heroTextContainer}>
-                <Text style={styles.heroText}>TRANSFORM</Text>
-                <Text style={styles.heroText}>YOUR LIMITS</Text>
-                <Text style={styles.heroText}>INTO LEVEL-</Text>
-                <Text style={styles.heroText}>UPS</Text>
-              </View>
-
-              <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>LOG IN</Text>
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>WELCOME BACK</Text>
-                  </View>
-                </View>
-                <Text style={styles.cardSubtitle}>Enter your details to sync your daily rings</Text>
-
-                {errorMessage ? (
-                  <View style={styles.errorContainer}>
-                    <Text style={styles.errorText}>{errorMessage}</Text>
-                  </View>
-                ) : null}
-
-                <View style={styles.form}>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Gmail / Email Address</Text>
-                    <View style={styles.inputContainer}>
-                      <Mail color="#64748B" size={20} style={styles.inputIcon} />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="marcus@gmail.com"
-                        placeholderTextColor="#64748B"
-                        onChangeText={setEmail}
-                        value={email}
-                        autoCapitalize="none"
-                        keyboardType="email-address"
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Password</Text>
-                    <View style={styles.inputContainer}>
-                      <Lock color="#64748B" size={20} style={styles.inputIcon} />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="••••••••"
-                        placeholderTextColor="#64748B"
-                        onChangeText={setPassword}
-                        value={password}
-                        secureTextEntry={true}
-                        autoCapitalize="none"
-                        returnKeyType="go"
-                        onSubmitEditing={signInWithEmail}
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.optionsRow}>
-                    <TouchableOpacity 
-                      style={styles.rememberMeContainer}
-                      onPress={() => setRememberMe(!rememberMe)}
-                    >
-                      {rememberMe ? (
-                        <CheckSquare color="#ccff00" size={20} />
-                      ) : (
-                        <Square color="#64748B" size={20} />
-                      )}
-                      <Text style={styles.rememberMeText}>Remember Me</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')}>
-                      <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <PremiumButton 
-                    title={loading ? 'SIGNING IN...' : 'CONTINUE WITH EMAIL ➔'}
-                    onPress={signInWithEmail}
-                    disabled={loading}
-                    loading={loading}
-                  />
-
-                  <View style={styles.footer}>
-                    <Text style={styles.footerText}>Don't have an account? </Text>
-                    <Link href="/(auth)/signup" asChild>
-                      <TouchableOpacity>
-                        <Text style={styles.linkText}>Sign Up</Text>
-                      </TouchableOpacity>
-                    </Link>
-                  </View>
-                </View>
-              </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
+      <View style={styles.logoContainer}>
+        <Dumbbell size={32} color="#ccff00" />
+        <Text style={styles.logoText}>FITFORGE</Text>
       </View>
-    </ImageBackground>
+      
+      <Text style={styles.tagline}>[ BE UNSTOPPABLE ]</Text>
+
+      <View style={styles.heroTextContainer}>
+        <Text style={styles.heroText}>TRANSFORM</Text>
+        <Text style={styles.heroText}>YOUR LIMITS</Text>
+        <Text style={styles.heroText}>INTO LEVEL-</Text>
+        <Text style={styles.heroText}>UPS</Text>
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>LOG IN</Text>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>WELCOME BACK</Text>
+          </View>
+        </View>
+        <Text style={styles.cardSubtitle}>Enter your details to sync your daily rings</Text>
+
+        {errorMessage ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.form}>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Gmail / Email Address</Text>
+            <View style={styles.inputContainer}>
+              <Mail color="#64748B" size={20} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="marcus@gmail.com"
+                placeholderTextColor="#64748B"
+                onChangeText={setEmail}
+                value={email}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.inputContainer}>
+              <Lock color="#64748B" size={20} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="••••••••"
+                placeholderTextColor="#64748B"
+                onChangeText={setPassword}
+                value={password}
+                secureTextEntry={true}
+                autoCapitalize="none"
+                returnKeyType="go"
+                onSubmitEditing={signInWithEmail}
+              />
+            </View>
+          </View>
+
+          <View style={styles.optionsRow}>
+            <TouchableOpacity 
+              style={styles.rememberMeContainer}
+              onPress={() => setRememberMe(!rememberMe)}
+            >
+              {rememberMe ? (
+                <CheckSquare color="#ccff00" size={20} />
+              ) : (
+                <Square color="#64748B" size={20} />
+              )}
+              <Text style={styles.rememberMeText}>Remember Me</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')}>
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            </TouchableOpacity>
+          </View>
+
+          <PremiumButton 
+            title={loading ? 'SIGNING IN...' : 'CONTINUE WITH EMAIL ➔'}
+            onPress={signInWithEmail}
+            disabled={loading}
+            loading={loading}
+          />
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Link href="/(auth)/signup" asChild>
+              <TouchableOpacity>
+                <Text style={styles.linkText}>Sign Up</Text>
+              </TouchableOpacity>
+            </Link>
+          </View>
+        </View>
+      </View>
+    </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(8,9,12,0.85)',
-  },
-  safeArea: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
   scrollContent: {
     flexGrow: 1,
     padding: 24,
@@ -175,11 +152,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
-  },
-  logoImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
   },
   logoText: {
     fontSize: 24,
@@ -300,21 +272,6 @@ const styles = StyleSheet.create({
     color: '#ccff00',
     fontSize: 14,
     textDecorationLine: 'underline',
-  },
-  button: {
-    backgroundColor: '#ccff00',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   footer: {
     flexDirection: 'row',

@@ -1,11 +1,13 @@
 import { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, Alert, ImageBackground } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { getBmiCategory } from '../../data/workouts';
 import { User, Flame, Scale, Ruler, Target, LogOut, ChevronRight, Activity, Zap, Pencil } from 'lucide-react-native';
+import { AppScreen } from '../../components/AppScreen';
+import { AppHeader } from '../../components/AppHeader';
+import { SPACING } from '../../constants/Layout';
 
 type Profile = {
   name: string;
@@ -30,10 +32,10 @@ type Profile = {
 };
 
 function getBmiColor(bmi: number): string {
-  if (bmi < 18.5) return '#60A5FA'; // blue - underweight
-  if (bmi <= 24.9) return '#22C55E'; // green - normal
-  if (bmi <= 29.9) return '#F59E0B'; // amber - overweight
-  return '#EF4444'; // red - obese
+  if (bmi < 18.5) return '#60A5FA'; 
+  if (bmi <= 24.9) return '#22C55E'; 
+  if (bmi <= 29.9) return '#F59E0B'; 
+  return '#EF4444'; 
 }
 
 function getGoalLabel(goal: string): string {
@@ -57,7 +59,7 @@ function getFitnessLabel(level: string): string {
 }
 
 export default function ProfileScreen() {
-  const { user, refreshProfile } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -96,7 +98,6 @@ export default function ProfileScreen() {
 
       loadProfile();
 
-      // Cleanup: prevent state updates if screen unfocused mid-fetch
       return () => { cancelled = true; };
     }, [user])
   );
@@ -114,9 +115,11 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color="#ccff00" />
-      </SafeAreaView>
+      <AppScreen bgImage={require('../../assets/profile_img3.jpg')} bgGradient hideBottomSafe>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#ccff00" />
+        </View>
+      </AppScreen>
     );
   }
 
@@ -125,170 +128,162 @@ export default function ProfileScreen() {
   const bmiColor = bmi ? getBmiColor(bmi) : '#9CA3AF';
 
   return (
-    <ImageBackground 
-      source={require('../../assets/profile_img3.jpg')}
-      style={styles.bgWrapper}
-      imageStyle={styles.bgImage}
-      resizeMode="cover"
+    <AppScreen 
+      bgImage={require('../../assets/profile_img3.jpg')} 
+      bgGradient 
+      hideBottomSafe
+      scrollable
+      contentContainerStyle={styles.scrollContent}
     >
-      <LinearGradient
-        colors={['rgba(8,9,12,0.4)', 'rgba(8,9,12,0.8)', 'rgba(8,9,12,1)']}
-        style={StyleSheet.absoluteFillObject}
-      />
-      <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Header */}
-          <View style={styles.header}>
-          <View style={styles.avatarCircle}>
-            <User size={36} color="#ccff00" />
-          </View>
-          <Text style={styles.name}>{profile?.name || 'Athlete'}</Text>
-          <Text style={styles.meta}>
-            {profile?.gender ? profile.gender.charAt(0).toUpperCase() + profile.gender.slice(1) : ''}{profile?.age ? ` · ${profile.age} yrs` : ''}
-          </Text>
-          <View style={styles.streakRow}>
-            <Flame size={16} color="#F59E0B" />
-            <Text style={styles.streakText}>{profile?.current_streak || 0} day streak</Text>
-          </View>
-        </View>
+      <AppHeader title="Profile" showBack={router.canGoBack()} />
 
-        {/* BMI Card — the main feature */}
-        {bmi ? (
-          <View style={[styles.bmiCard, { borderColor: bmiColor + '50' }]}>
-            <View style={styles.bmiLeft}>
-              <Text style={styles.bmiLabel}>BODY MASS INDEX</Text>
-              <Text style={[styles.bmiValue, { color: bmiColor }]}>{bmi.toFixed(1)}</Text>
-              <View style={[styles.bmiBadge, { backgroundColor: bmiColor + '20', borderColor: bmiColor + '40' }]}>
-                <Text style={[styles.bmiBadgeText, { color: bmiColor }]}>
-                  {bmiCategory ? bmiCategory.charAt(0).toUpperCase() + bmiCategory.slice(1) : ''}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.bmiRight}>
-              <View style={styles.bmiStatRow}>
-                <Scale size={16} color="#9CA3AF" />
-                <Text style={styles.bmiStatText}>{profile?.weight} kg</Text>
-              </View>
-              <View style={styles.bmiStatRow}>
-                <Ruler size={16} color="#9CA3AF" />
-                <Text style={styles.bmiStatText}>{profile?.height} cm</Text>
-              </View>
-              <Text style={styles.bmiHint}>Healthy: 18.5 – 24.9</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.avatarCircle}>
+          <User size={36} color="#ccff00" />
+        </View>
+        <Text style={styles.name}>{profile?.name || 'Athlete'}</Text>
+        <Text style={styles.meta}>
+          {profile?.gender ? profile.gender.charAt(0).toUpperCase() + profile.gender.slice(1) : ''}{profile?.age ? ` · ${profile.age} yrs` : ''}
+        </Text>
+        <View style={styles.streakRow}>
+          <Flame size={16} color="#F59E0B" />
+          <Text style={styles.streakText}>{profile?.current_streak || 0} day streak</Text>
+        </View>
+      </View>
+
+      {/* BMI Card */}
+      {bmi ? (
+        <View style={[styles.bmiCard, { borderColor: bmiColor + '50' }]}>
+          <View style={styles.bmiLeft}>
+            <Text style={styles.bmiLabel}>BODY MASS INDEX</Text>
+            <Text style={[styles.bmiValue, { color: bmiColor }]}>{bmi.toFixed(1)}</Text>
+            <View style={[styles.bmiBadge, { backgroundColor: bmiColor + '20', borderColor: bmiColor + '40' }]}>
+              <Text style={[styles.bmiBadgeText, { color: bmiColor }]}>
+                {bmiCategory ? bmiCategory.charAt(0).toUpperCase() + bmiCategory.slice(1) : ''}
+              </Text>
             </View>
           </View>
-        ) : (
-          <View style={styles.missingCard}>
-            <Text style={styles.missingText}>BMI could not be calculated. Please update your profile.</Text>
-          </View>
-        )}
-
-        {/* Nutrition Targets */}
-        <Text style={styles.sectionTitle}>NUTRITION TARGETS</Text>
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Flame size={20} color="#F59E0B" />
-            <Text style={styles.statValue}>{profile?.calorie_target || '—'}</Text>
-            <Text style={styles.statLabel}>Calories</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Zap size={20} color="#6C63FF" />
-            <Text style={styles.statValue}>{profile?.protein_target || '—'}g</Text>
-            <Text style={styles.statLabel}>Protein</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Activity size={20} color="#22C55E" />
-            <Text style={styles.statValue}>{profile?.bmr ? Math.round(profile.bmr) : '—'}</Text>
-            <Text style={styles.statLabel}>BMR</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Target size={20} color="#ccff00" />
-            <Text style={styles.statValue}>{profile?.tdee ? Math.round(profile.tdee) : '—'}</Text>
-            <Text style={styles.statLabel}>TDEE</Text>
-          </View>
-        </View>
-
-        {/* Goal & Level */}
-        <Text style={styles.sectionTitle}>TRAINING PROFILE</Text>
-        <View style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoKey}>Goal</Text>
-            <Text style={styles.infoValue}>{profile?.goal ? getGoalLabel(profile.goal) : '—'}</Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoKey}>Fitness Level</Text>
-            <Text style={styles.infoValue}>{profile?.fitness_level ? getFitnessLabel(profile.fitness_level) : '—'}</Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoKey}>Best Streak</Text>
-            <Text style={styles.infoValue}>{profile?.longest_streak || 0} days</Text>
-          </View>
-        </View>
-
-        {/* Abilities */}
-        <Text style={styles.sectionTitle}>CURRENT BASELINE</Text>
-        <View style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoKey}>Push-ups</Text>
-            <Text style={styles.infoValue}>{profile?.push_up_ability || '—'}</Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoKey}>Pull-ups</Text>
-            <Text style={styles.infoValue}>{profile?.pull_up_ability || '—'}</Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoKey}>Plank</Text>
-            <Text style={styles.infoValue}>{profile?.plank_ability || '—'}</Text>
-          </View>
-        </View>
-
-        {/* Edit body stats shortcut */}
-        <TouchableOpacity
-          style={styles.editBodyBtn}
-          onPress={() => router.push('/profile/edit')}
-          activeOpacity={0.8}
-        >
-          <View style={styles.editBodyLeft}>
-            <Pencil size={18} color="#ccff00" />
-            <View>
-              <Text style={styles.editBodyTitle}>Edit Body Stats</Text>
-              <Text style={styles.editBodySub}>Update weight & height · recalculates BMI</Text>
+          <View style={styles.bmiRight}>
+            <View style={styles.bmiStatRow}>
+              <Scale size={16} color="#9CA3AF" />
+              <Text style={styles.bmiStatText}>{profile?.weight} kg</Text>
             </View>
+            <View style={styles.bmiStatRow}>
+              <Ruler size={16} color="#9CA3AF" />
+              <Text style={styles.bmiStatText}>{profile?.height} cm</Text>
+            </View>
+            <Text style={styles.bmiHint}>Healthy: 18.5 – 24.9</Text>
           </View>
-          <ChevronRight size={18} color="#ccff00" />
-        </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.missingCard}>
+          <Text style={styles.missingText}>BMI could not be calculated. Please update your profile.</Text>
+        </View>
+      )}
 
-        {/* Re-do onboarding */}
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => router.push('/(onboarding)')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.editButtonText}>Full Profile Recalculate</Text>
-          <ChevronRight size={20} color="#ccff00" />
-        </TouchableOpacity>
+      {/* Nutrition Targets */}
+      <Text style={styles.sectionTitle}>NUTRITION TARGETS</Text>
+      <View style={styles.statsGrid}>
+        <View style={styles.statCard}>
+          <Flame size={20} color="#F59E0B" />
+          <Text style={styles.statValue}>{profile?.calorie_target || '—'}</Text>
+          <Text style={styles.statLabel}>Calories</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Zap size={20} color="#6C63FF" />
+          <Text style={styles.statValue}>{profile?.protein_target || '—'}g</Text>
+          <Text style={styles.statLabel}>Protein</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Activity size={20} color="#22C55E" />
+          <Text style={styles.statValue}>{profile?.bmr ? Math.round(profile.bmr) : '—'}</Text>
+          <Text style={styles.statLabel}>BMR</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Target size={20} color="#ccff00" />
+          <Text style={styles.statValue}>{profile?.tdee ? Math.round(profile.tdee) : '—'}</Text>
+          <Text style={styles.statLabel}>TDEE</Text>
+        </View>
+      </View>
 
-        {/* Logout */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
-          <LogOut size={20} color="#EF4444" />
-          <Text style={styles.logoutText}>Log Out</Text>
-        </TouchableOpacity>
-        </ScrollView>
-      </SafeAreaView>
-    </ImageBackground>
+      {/* Goal & Level */}
+      <Text style={styles.sectionTitle}>TRAINING PROFILE</Text>
+      <View style={styles.infoCard}>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoKey}>Goal</Text>
+          <Text style={styles.infoValue}>{profile?.goal ? getGoalLabel(profile.goal) : '—'}</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.infoRow}>
+          <Text style={styles.infoKey}>Fitness Level</Text>
+          <Text style={styles.infoValue}>{profile?.fitness_level ? getFitnessLabel(profile.fitness_level) : '—'}</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.infoRow}>
+          <Text style={styles.infoKey}>Best Streak</Text>
+          <Text style={styles.infoValue}>{profile?.longest_streak || 0} days</Text>
+        </View>
+      </View>
+
+      {/* Abilities */}
+      <Text style={styles.sectionTitle}>CURRENT BASELINE</Text>
+      <View style={styles.infoCard}>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoKey}>Push-ups</Text>
+          <Text style={styles.infoValue}>{profile?.push_up_ability || '—'}</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.infoRow}>
+          <Text style={styles.infoKey}>Pull-ups</Text>
+          <Text style={styles.infoValue}>{profile?.pull_up_ability || '—'}</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.infoRow}>
+          <Text style={styles.infoKey}>Plank</Text>
+          <Text style={styles.infoValue}>{profile?.plank_ability || '—'}</Text>
+        </View>
+      </View>
+
+      {/* Edit body stats shortcut */}
+      <TouchableOpacity
+        style={styles.editBodyBtn}
+        onPress={() => router.push('/profile/edit')}
+        activeOpacity={0.8}
+      >
+        <View style={styles.editBodyLeft}>
+          <Pencil size={18} color="#ccff00" />
+          <View>
+            <Text style={styles.editBodyTitle}>Edit Body Stats</Text>
+            <Text style={styles.editBodySub}>Update weight & height · recalculates BMI</Text>
+          </View>
+        </View>
+        <ChevronRight size={18} color="#ccff00" />
+      </TouchableOpacity>
+
+      {/* Re-do onboarding */}
+      <TouchableOpacity
+        style={styles.editButton}
+        onPress={() => router.push('/(onboarding)')}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.editButtonText}>Full Profile Recalculate</Text>
+        <ChevronRight size={20} color="#ccff00" />
+      </TouchableOpacity>
+
+      {/* Logout */}
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
+        <LogOut size={20} color="#EF4444" />
+        <Text style={styles.logoutText}>Log Out</Text>
+      </TouchableOpacity>
+    </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  bgWrapper: { flex: 1, backgroundColor: '#000' },
-  bgImage: { opacity: 0.65 },
-  container: { flex: 1, backgroundColor: 'transparent' },
-  center: { justifyContent: 'center', alignItems: 'center' },
-  scrollContent: { padding: 20, paddingBottom: 100 },
-  header: { alignItems: 'center', marginBottom: 28, marginTop: 8 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scrollContent: { paddingHorizontal: SPACING.screenHorizontal, paddingBottom: 120 },
+  header: { alignItems: 'center', marginBottom: SPACING.section },
   avatarCircle: {
     width: 80, height: 80, borderRadius: 40,
     backgroundColor: 'rgba(204,255,0,0.1)',
@@ -305,7 +300,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#161921',
     borderRadius: 20, borderWidth: 1,
     padding: 24, flexDirection: 'row',
-    alignItems: 'center', marginBottom: 28,
+    alignItems: 'center', marginBottom: SPACING.section,
   },
   bmiLeft: { flex: 1 },
   bmiLabel: { color: '#9CA3AF', fontSize: 11, fontWeight: 'bold', letterSpacing: 1.2, marginBottom: 6 },
@@ -322,7 +317,7 @@ const styles = StyleSheet.create({
   bmiHint: { color: '#4B5563', fontSize: 11, marginTop: 4 },
   missingCard: {
     backgroundColor: '#161921', borderRadius: 16,
-    padding: 20, marginBottom: 28, borderWidth: 1, borderColor: '#2D3748',
+    padding: 20, marginBottom: SPACING.section, borderWidth: 1, borderColor: '#2D3748',
   },
   missingText: { color: '#9CA3AF', textAlign: 'center' },
 
@@ -331,7 +326,7 @@ const styles = StyleSheet.create({
     color: '#9CA3AF', fontSize: 12, fontWeight: 'bold',
     letterSpacing: 1.2, marginBottom: 12, marginLeft: 4,
   },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 28 },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: SPACING.section },
   statCard: {
     flex: 1, minWidth: '45%',
     backgroundColor: '#161921', borderRadius: 16,

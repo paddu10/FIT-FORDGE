@@ -3,19 +3,18 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
-  ScrollView,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { ArrowLeft, Scale, Ruler, CheckCircle, RefreshCw } from 'lucide-react-native';
+import { Scale, Ruler, CheckCircle, RefreshCw } from 'lucide-react-native';
+import { AppScreen } from '../../components/AppScreen';
+import { AppHeader } from '../../components/AppHeader';
+import { SPACING } from '../../constants/Layout';
 
 function calcBmi(weightKg: number, heightCm: number): number {
   const hM = heightCm / 100;
@@ -30,7 +29,6 @@ function getBmiCategory(bmi: number): { label: string; color: string } {
 }
 
 function calcBmr(weightKg: number, heightCm: number, age: number, gender: string): number {
-  // Mifflin-St Jeor
   if (gender === 'female') {
     return 10 * weightKg + 6.25 * heightCm - 5 * age - 161;
   }
@@ -154,152 +152,127 @@ export default function EditProfileScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color="#ccff00" />
-      </SafeAreaView>
+      <AppScreen bgImage={require('../../assets/Profile_img2.jpg')} bgGradient hideBottomSafe>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#ccff00" />
+        </View>
+      </AppScreen>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-            <ArrowLeft size={22} color="#FFFFFF" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit Body Stats</Text>
-          <View style={{ width: 40 }} />
+    <AppScreen 
+      bgImage={require('../../assets/Profile_img2.jpg')}
+      bgGradient
+      hideBottomSafe
+      scrollable
+      contentContainerStyle={styles.scroll}
+    >
+      <AppHeader title="Edit Body Stats" showBack={true} />
+
+      <Text style={styles.subtitle}>
+        Update your measurements to keep BMI, BMR, and calorie targets accurate.
+      </Text>
+
+      {/* Weight Input */}
+      <View style={styles.inputGroup}>
+        <View style={styles.inputLabelRow}>
+          <Scale size={18} color="#ccff00" />
+          <Text style={styles.inputLabel}>Weight</Text>
+          <Text style={styles.inputUnit}>kg</Text>
         </View>
+        <TextInput
+          style={styles.input}
+          value={weight}
+          onChangeText={setWeight}
+          keyboardType="decimal-pad"
+          placeholder="e.g. 75"
+          placeholderTextColor="#4B5563"
+          maxLength={6}
+        />
+      </View>
 
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Text style={styles.subtitle}>
-            Update your measurements to keep BMI, BMR, and calorie targets accurate.
-          </Text>
+      {/* Height Input */}
+      <View style={styles.inputGroup}>
+        <View style={styles.inputLabelRow}>
+          <Ruler size={18} color="#ccff00" />
+          <Text style={styles.inputLabel}>Height</Text>
+          <Text style={styles.inputUnit}>cm</Text>
+        </View>
+        <TextInput
+          style={styles.input}
+          value={height}
+          onChangeText={setHeight}
+          keyboardType="decimal-pad"
+          placeholder="e.g. 175"
+          placeholderTextColor="#4B5563"
+          maxLength={6}
+        />
+      </View>
 
-          {/* Weight Input */}
-          <View style={styles.inputGroup}>
-            <View style={styles.inputLabelRow}>
-              <Scale size={18} color="#ccff00" />
-              <Text style={styles.inputLabel}>Weight</Text>
-              <Text style={styles.inputUnit}>kg</Text>
-            </View>
-            <TextInput
-              style={styles.input}
-              value={weight}
-              onChangeText={setWeight}
-              keyboardType="decimal-pad"
-              placeholder="e.g. 75"
-              placeholderTextColor="#4B5563"
-              maxLength={6}
-            />
+      {/* Live Preview */}
+      {validInputs && previewBmi !== null && previewBmiCat && (
+        <View style={[styles.previewCard, { borderColor: previewBmiCat.color + '50' }]}>
+          <View style={styles.previewHeader}>
+            <RefreshCw size={13} color="#9CA3AF" />
+            <Text style={styles.previewHeaderText}>LIVE PREVIEW</Text>
           </View>
-
-          {/* Height Input */}
-          <View style={styles.inputGroup}>
-            <View style={styles.inputLabelRow}>
-              <Ruler size={18} color="#ccff00" />
-              <Text style={styles.inputLabel}>Height</Text>
-              <Text style={styles.inputUnit}>cm</Text>
-            </View>
-            <TextInput
-              style={styles.input}
-              value={height}
-              onChangeText={setHeight}
-              keyboardType="decimal-pad"
-              placeholder="e.g. 175"
-              placeholderTextColor="#4B5563"
-              maxLength={6}
-            />
-          </View>
-
-          {/* Live Preview */}
-          {validInputs && previewBmi !== null && previewBmiCat && (
-            <View style={[styles.previewCard, { borderColor: previewBmiCat.color + '50' }]}>
-              <View style={styles.previewHeader}>
-                <RefreshCw size={13} color="#9CA3AF" />
-                <Text style={styles.previewHeaderText}>LIVE PREVIEW</Text>
-              </View>
-              <View style={styles.previewRow}>
-                {/* BMI column */}
-                <View style={styles.previewStat}>
-                  <Text style={styles.previewStatLabel}>BMI</Text>
-                  <Text style={[styles.previewBigValue, { color: previewBmiCat.color }]}>
-                    {previewBmi.toFixed(1)}
-                  </Text>
-                  <View style={[styles.badgePill, { backgroundColor: previewBmiCat.color + '20', borderColor: previewBmiCat.color + '40' }]}>
-                    <Text style={[styles.badgePillText, { color: previewBmiCat.color }]}>{previewBmiCat.label}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.previewDivider} />
-
-                {/* BMR / TDEE column */}
-                <View style={styles.previewStat}>
-                  <Text style={styles.previewStatLabel}>BMR</Text>
-                  <Text style={styles.previewSmallValue}>{Math.round(previewBmr!)} <Text style={styles.previewUnit}>kcal</Text></Text>
-                  <View style={{ height: 10 }} />
-                  <Text style={styles.previewStatLabel}>TDEE</Text>
-                  <Text style={styles.previewSmallValue}>{Math.round(previewTdee!)} <Text style={styles.previewUnit}>kcal</Text></Text>
-                </View>
+          <View style={styles.previewRow}>
+            {/* BMI column */}
+            <View style={styles.previewStat}>
+              <Text style={styles.previewStatLabel}>BMI</Text>
+              <Text style={[styles.previewBigValue, { color: previewBmiCat.color }]}>
+                {previewBmi.toFixed(1)}
+              </Text>
+              <View style={[styles.badgePill, { backgroundColor: previewBmiCat.color + '20', borderColor: previewBmiCat.color + '40' }]}>
+                <Text style={[styles.badgePillText, { color: previewBmiCat.color }]}>{previewBmiCat.label}</Text>
               </View>
             </View>
-          )}
 
-          {/* Tip */}
-          <View style={styles.infoBox}>
-            <Text style={styles.infoText}>
-              💡 Calorie &amp; protein targets are automatically recalculated from your goal and new measurements when you save.
-            </Text>
+            <View style={styles.previewDivider} />
+
+            {/* BMR / TDEE column */}
+            <View style={styles.previewStat}>
+              <Text style={styles.previewStatLabel}>BMR</Text>
+              <Text style={styles.previewSmallValue}>{Math.round(previewBmr!)} <Text style={styles.previewUnit}>kcal</Text></Text>
+              <View style={{ height: 10 }} />
+              <Text style={styles.previewStatLabel}>TDEE</Text>
+              <Text style={styles.previewSmallValue}>{Math.round(previewTdee!)} <Text style={styles.previewUnit}>kcal</Text></Text>
+            </View>
           </View>
+        </View>
+      )}
 
-          {/* Save */}
-          <TouchableOpacity
-            style={[styles.saveBtn, (!validInputs || saving) && styles.saveBtnDisabled]}
-            onPress={handleSave}
-            activeOpacity={0.85}
-            disabled={!validInputs || saving}
-          >
-            {saving ? (
-              <ActivityIndicator color="#000000" size="small" />
-            ) : (
-              <>
-                <CheckCircle size={20} color="#000000" />
-                <Text style={styles.saveBtnText}>Save Changes</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      {/* Tip */}
+      <View style={styles.infoBox}>
+        <Text style={styles.infoText}>
+          💡 Calorie &amp; protein targets are automatically recalculated from your goal and new measurements when you save.
+        </Text>
+      </View>
+
+      {/* Save */}
+      <TouchableOpacity
+        style={[styles.saveBtn, (!validInputs || saving) && styles.saveBtnDisabled]}
+        onPress={handleSave}
+        activeOpacity={0.85}
+        disabled={!validInputs || saving}
+      >
+        {saving ? (
+          <ActivityIndicator color="#000000" size="small" />
+        ) : (
+          <>
+            <CheckCircle size={20} color="#000000" />
+            <Text style={styles.saveBtnText}>Save Changes</Text>
+          </>
+        )}
+      </TouchableOpacity>
+    </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#08090C' },
-  center: { justifyContent: 'center', alignItems: 'center' },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E2430',
-  },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#161921',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
-
-  scroll: { padding: 20, paddingBottom: 60 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scroll: { paddingHorizontal: SPACING.screenHorizontal, paddingBottom: 60 },
   subtitle: {
     color: '#9CA3AF', fontSize: 14, lineHeight: 21,
     marginBottom: 28, textAlign: 'center',

@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { 
+  View, Text, TouchableOpacity, StyleSheet, 
+  ScrollView, Alert, ActivityIndicator, ImageBackground, Dimensions, StatusBar 
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 import { CheckCircle2, Flame, Droplets } from 'lucide-react-native';
 import { generateFutureSchedule } from '../../lib/WorkoutEngine';
+
+const { width, height } = Dimensions.get('window');
 
 export default function CompleteScreen() {
   const { user, refreshProfile } = useAuth();
@@ -169,178 +175,254 @@ export default function CompleteScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ccff00" />
-          <Text style={styles.loadingText}>Generating your personalized plan...</Text>
-        </View>
-      </SafeAreaView>
+      <View style={[styles.root, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#ccff00" />
+        <Text style={styles.loadingText}>Generating your personalized plan...</Text>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <CheckCircle2 size={48} color="#ccff00" />
-          <Text style={styles.title}>Your personalized plan is ready</Text>
-          <Text style={styles.subtitle}>Based on your biometrics and goals, we've calculated your optimal targets. (These are estimates)</Text>
-        </View>
+    <View style={styles.root}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-        {metrics && (
-          <View style={styles.metricsContainer}>
-            <View style={styles.metricCard}>
-              <View style={styles.metricIconBox}>
-                <Flame size={24} color="#F59E0B" />
-              </View>
-              <View>
-                <Text style={styles.metricLabel}>Daily Calorie Target</Text>
-                <Text style={styles.metricValue}>{metrics.calorie_target} <Text style={styles.metricUnit}>kcal</Text></Text>
-                <Text style={styles.metricSubtext}>Maintenance: {metrics.tdee} kcal</Text>
-              </View>
-            </View>
+      <ImageBackground
+        source={require('../../assets/person plan_img.jpg')}
+        style={styles.bgImage}
+        resizeMode="cover"
+      >
+        <LinearGradient
+          colors={['rgba(0,0,0,0.15)', 'rgba(8,9,12,0.70)', 'rgba(8,9,12,0.97)']}
+          locations={[0, 0.42, 0.72]}
+          style={StyleSheet.absoluteFill}
+        />
 
-            <View style={styles.metricCard}>
-              <View style={styles.metricIconBox}>
-                <Droplets size={24} color="#6C63FF" />
-              </View>
-              <View>
-                <Text style={styles.metricLabel}>Daily Protein Target</Text>
-                <Text style={styles.metricValue}>{metrics.protein_target} <Text style={styles.metricUnit}>g</Text></Text>
-                <Text style={styles.metricSubtext}>To support your goals</Text>
-              </View>
-            </View>
-
-            <View style={styles.infoBox}>
-              <Text style={styles.infoText}>
-                Your Basal Metabolic Rate (BMR) is estimated at {metrics.bmr} kcal. 
-                This is what your body burns at rest.
-              </Text>
-            </View>
-          </View>
-        )}
-
-        <TouchableOpacity 
-          style={[styles.button, saving && styles.buttonDisabled]} 
-          onPress={handleFinish}
-          disabled={saving}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.buttonText}>
-            {saving ? 'FINISHING...' : 'START MY FITNESS JOURNEY'}
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </SafeAreaView>
+          {/* Hero */}
+          <View style={styles.heroSpace}>
+            <View style={styles.badgeRow}>
+              <CheckCircle2 size={18} color="#ccff00" />
+              <Text style={styles.badgeText}>FIT FORGE</Text>
+            </View>
+            <Text style={styles.heroTitle}>Your Plan{'\n'}Is Ready</Text>
+            <Text style={styles.heroSub}>Based on your biometrics and goals, we've calculated your optimal targets.</Text>
+          </View>
+
+          {/* Glass card */}
+          {metrics && (
+            <View style={styles.card}>
+              
+              {/* Calorie Metric */}
+              <View style={styles.metricCard}>
+                <View style={styles.metricIconBox}>
+                  <Flame size={24} color="#F59E0B" />
+                </View>
+                <View>
+                  <Text style={styles.metricLabel}>Daily Calorie Target</Text>
+                  <Text style={styles.metricValue}>
+                    {metrics.calorie_target} <Text style={styles.metricUnit}>kcal</Text>
+                  </Text>
+                  <Text style={styles.metricSubtext}>Maintenance: {metrics.tdee} kcal</Text>
+                </View>
+              </View>
+
+              {/* Protein Metric */}
+              <View style={styles.metricCard}>
+                <View style={styles.metricIconBox}>
+                  <Droplets size={24} color="#6C63FF" />
+                </View>
+                <View>
+                  <Text style={styles.metricLabel}>Daily Protein Target</Text>
+                  <Text style={styles.metricValue}>
+                    {metrics.protein_target} <Text style={styles.metricUnit}>g</Text>
+                  </Text>
+                  <Text style={styles.metricSubtext}>To support your goals</Text>
+                </View>
+              </View>
+
+              {/* BMR Info Box */}
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>
+                  Your Basal Metabolic Rate (BMR) is estimated at {metrics.bmr} kcal. 
+                  This is what your body burns at rest.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.button, saving && styles.buttonDisabled]}
+                onPress={handleFinish}
+                disabled={saving}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={['#d4ff00', '#ccff00', '#aadd00']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.btnGrad}
+                >
+                  <Text style={styles.buttonText}>
+                    {saving ? 'FINISHING...' : 'START MY JOURNEY ➔'}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {/* ───── Footer ───── */}
+          <View style={styles.footer}>
+            <View style={styles.footerDivider} />
+
+            <Text style={styles.footerQuote}>
+              "A goal without a plan is just a wish."
+            </Text>
+            <Text style={styles.footerQuoteAttr}>— Antoine de Saint-Exupéry</Text>
+
+            <View style={styles.footerPills}>
+              <View style={styles.pill}>
+                <Text style={styles.pillIcon}>🧬</Text>
+                <Text style={styles.pillText}>Science-Based</Text>
+              </View>
+              <View style={styles.pill}>
+                <Text style={styles.pillIcon}>🎯</Text>
+                <Text style={styles.pillText}>Goal-Oriented</Text>
+              </View>
+              <View style={styles.pill}>
+                <Text style={styles.pillIcon}>🚀</Text>
+                <Text style={styles.pillText}>Ready</Text>
+              </View>
+            </View>
+
+            <Text style={styles.footerAbout}>
+              Everything is set. Your tailored nutrition targets and custom workout plan are locked in. Let's forge your physique.
+            </Text>
+
+            <Text style={styles.footerCopy}>© 2025 FIT FORGE. All rights reserved.</Text>
+          </View>
+          
+        </ScrollView>
+      </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#08090C',
+  root: { flex: 1, backgroundColor: '#08090C' },
+  loadingContainer: { alignItems: 'center', justifyContent: 'center' },
+  loadingText: { color: '#9CA3AF', marginTop: 16, fontSize: 16, fontWeight: '600' },
+  bgImage: { width, height, flex: 1 },
+  scrollContent: { flexGrow: 1, justifyContent: 'flex-end', paddingBottom: 32 },
+
+  // Hero
+  heroSpace: { paddingHorizontal: 28, paddingTop: 80, paddingBottom: 32 },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 18 },
+  badgeText: { color: '#ccff00', fontWeight: '800', fontSize: 13, letterSpacing: 2.5 },
+  heroTitle: {
+    fontSize: 48, fontWeight: '900', color: '#FFFFFF', lineHeight: 52, marginBottom: 10,
+    textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8,
   },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    color: '#9CA3AF',
-    marginTop: 16,
-    fontSize: 16,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 24,
-    justifyContent: 'center',
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    marginTop: 16,
-    textAlign: 'center',
-    lineHeight: 34,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#9CA3AF',
-    marginTop: 12,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  metricsContainer: {
-    gap: 16,
-    marginBottom: 40,
-  },
-  metricCard: {
-    backgroundColor: '#161921',
+  heroSub: { fontSize: 15, color: 'rgba(255,255,255,0.65)', lineHeight: 22 },
+
+  // Glass card
+  card: {
+    marginHorizontal: 16,
+    backgroundColor: 'rgba(22, 25, 33, 0.88)',
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#2D3748',
+    borderColor: 'rgba(255,255,255,0.08)',
+    padding: 24,
+    gap: 20,
+  },
+
+  // Metric Cards
+  metricCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
   },
   metricIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#0F1115',
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   metricLabel: {
-    color: '#9CA3AF',
-    fontSize: 14,
-    fontWeight: '600',
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
     marginBottom: 4,
   },
   metricValue: {
     color: '#FFFFFF',
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '900',
+    letterSpacing: -0.5,
   },
   metricUnit: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#64748B',
+    color: 'rgba(255,255,255,0.4)',
   },
   metricSubtext: {
-    color: '#64748B',
+    color: 'rgba(255,255,255,0.4)',
     fontSize: 12,
-    marginTop: 4,
+    marginTop: 2,
   },
+
+  // Info Box
   infoBox: {
-    backgroundColor: 'rgba(108, 99, 255, 0.1)',
+    backgroundColor: 'rgba(108, 99, 255, 0.08)',
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(108, 99, 255, 0.2)',
   },
   infoText: {
-    color: '#9CA3AF',
+    color: 'rgba(255,255,255,0.6)',
     fontSize: 13,
     lineHeight: 20,
     textAlign: 'center',
   },
-  button: {
-    backgroundColor: '#ccff00',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
+
+  // Button
+  button: { borderRadius: 14, overflow: 'hidden', marginTop: 4 },
+  buttonDisabled: { opacity: 0.7 },
+  btnGrad: { paddingVertical: 17, alignItems: 'center', justifyContent: 'center' },
+  buttonText: { color: '#000000', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
+
+  // Footer
+  footer: { marginHorizontal: 16, marginTop: 28, marginBottom: 40, alignItems: 'center', gap: 16 },
+  footerDivider: { width: '40%', height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: 4 },
+  footerQuote: {
+    color: 'rgba(255,255,255,0.75)', fontSize: 15, fontStyle: 'italic',
+    textAlign: 'center', lineHeight: 22, paddingHorizontal: 16,
   },
-  buttonDisabled: {
-    opacity: 0.7,
+  footerQuoteAttr: { color: '#ccff00', fontSize: 12, fontWeight: '700', letterSpacing: 1, marginTop: -8 },
+  footerPills: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 },
+  pill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8,
   },
-  buttonText: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: 'bold',
-  }
+  pillIcon: { fontSize: 13 },
+  pillText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' },
+  footerAbout: {
+    color: 'rgba(255,255,255,0.38)', fontSize: 12,
+    textAlign: 'center', lineHeight: 19, paddingHorizontal: 8,
+  },
+  footerCopy: { color: 'rgba(255,255,255,0.2)', fontSize: 11, letterSpacing: 0.5, marginTop: 4 },
 });

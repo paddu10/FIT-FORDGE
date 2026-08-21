@@ -37,6 +37,7 @@ export function WeeklyActivity({ data, style }: Props) {
             ]}>
               {day.status === 'completed' && <Text style={styles.statusTextMark}>✓</Text>}
               {day.status === 'rest' && <Text style={styles.statusTextRest}>R</Text>}
+              {day.status === 'upcoming' && <View style={styles.upcomingDot} />}
             </View>
             
             {day.isToday && <View style={styles.todayIndicator} />}
@@ -113,6 +114,12 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  upcomingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.accent,
   },
   todayIndicator: {
     width: 4,

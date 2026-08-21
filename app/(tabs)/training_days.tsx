@@ -1,20 +1,23 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, Alert } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Calendar } from 'lucide-react-native';
+import { Calendar } from 'lucide-react-native';
 import { generateFutureSchedule } from '../../lib/WorkoutEngine';
-import { theme } from '../../constants/theme';
+import { AppScreen } from '../../components/AppScreen';
+import { AppHeader } from '../../components/AppHeader';
+import { SPACING } from '../../constants/Layout';
 
 const WEEKDAYS = [
-  { id: 1, label: 'MON' },
-  { id: 2, label: 'TUE' },
-  { id: 3, label: 'WED' },
-  { id: 4, label: 'THU' },
-  { id: 5, label: 'FRI' },
-  { id: 6, label: 'SAT' },
-  { id: 0, label: 'SUN' },
+  { id: 1, label: 'MONDAY' },
+  { id: 2, label: 'TUESDAY' },
+  { id: 3, label: 'WEDNESDAY' },
+  { id: 4, label: 'THURSDAY' },
+  { id: 5, label: 'FRIDAY' },
+  { id: 6, label: 'SATURDAY' },
+  { id: 0, label: 'SUNDAY' },
 ];
 
 export default function TrainingDaysScreen() {
@@ -60,14 +63,8 @@ export default function TrainingDaysScreen() {
         'Update Schedule',
         'Do you want to apply this schedule starting from this week, or next week?',
         [
-          {
-            text: 'This Week',
-            onPress: () => saveSchedule(true)
-          },
-          {
-            text: 'Next Week',
-            onPress: () => saveSchedule(false)
-          },
+          { text: 'This Week', onPress: () => saveSchedule(true) },
+          { text: 'Next Week', onPress: () => saveSchedule(false) },
           { text: 'Cancel', style: 'cancel' }
         ]
       );
@@ -79,16 +76,13 @@ export default function TrainingDaysScreen() {
     setSaving(true);
     
     try {
-      // Save to profile
       await supabase.from('profiles').update({ 
         training_days_pref: trainingDaysPref,
         training_days: trainingDaysPref.length
       }).eq('id', user.id);
 
-      // Determine date to start regenerating
       const today = new Date();
       if (!applyThisWeek) {
-        // Find next Monday
         const day = today.getDay();
         const diff = (day === 0 ? 1 : 8 - day);
         today.setDate(today.getDate() + diff);
@@ -100,7 +94,6 @@ export default function TrainingDaysScreen() {
         String(today.getDate()).padStart(2, '0')
       ].join('-');
       
-      // Delete pending future workouts to allow regeneration
       await supabase
         .from('daily_workouts')
         .delete()
@@ -108,9 +101,7 @@ export default function TrainingDaysScreen() {
         .eq('status', 'pending')
         .gte('scheduled_date', startDateStr);
         
-      // Regenerate
       await generateFutureSchedule(user.id, startDateStr, 14);
-
       setSaving(false);
       
       if (Platform.OS === 'web') {
@@ -134,81 +125,196 @@ export default function TrainingDaysScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator color={theme.colors.accent} />
-      </SafeAreaView>
+      <AppScreen bgImage={require('../../assets/Custom your week_img.jpg')} bgGradient hideBottomSafe>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ccff00" />
+        </View>
+      </AppScreen>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ChevronLeft color="#FFF" size={24} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Workout Days</Text>
-        <View style={{width: 24}} />
+    <AppScreen 
+      bgImage={require('../../assets/Custom your week_img.jpg')} 
+      bgGradient
+      hideBottomSafe
+      scrollable
+      contentContainerStyle={styles.scrollContent}
+    >
+      {/* We just use AppHeader for the back button, since it handles status bar padding perfectly */}
+      <AppHeader showBack={true} />
+
+      {/* Hero */}
+      <View style={styles.heroSpace}>
+        <View style={styles.badgeRow}>
+          <Calendar size={18} color="#ccff00" />
+          <Text style={styles.badgeText}>FIT FORGE</Text>
+        </View>
+        <Text style={styles.heroTitle}>Custom{'\n'}Your Week</Text>
+        <Text style={styles.heroSub}>Select the days you want to train. Unselected days will become Recovery Days.</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.iconContainer}>
-          <Calendar size={48} color={theme.colors.accent} />
+      {/* Glass card */}
+      <View style={styles.card}>
+        <View style={styles.section}>
+          <Text style={styles.cardLabel}>TRAINING DAYS ({trainingDaysPref.length}/7)</Text>
+          
+          <View style={styles.grid}>
+            {WEEKDAYS.map((day) => {
+              const isActive = trainingDaysPref.includes(day.id);
+              return (
+                <TouchableOpacity
+                  key={day.id}
+                  style={[styles.dayCard, isActive && styles.dayCardActive]}
+                  onPress={() => toggleDay(day.id)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.dayText, isActive && styles.dayTextActive]}>{day.label}</Text>
+                  <View style={[styles.checkbox, isActive && styles.checkboxActive]}>
+                    {isActive && <View style={styles.checkboxInner} />}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
-        <Text style={styles.title}>Customize your week</Text>
-        <Text style={styles.subtitle}>Select the days you want to train. Unselected days will become Recovery Days.</Text>
 
-        <View style={styles.grid}>
-          {WEEKDAYS.map((day) => {
-            const isActive = trainingDaysPref.includes(day.id);
-            return (
-              <TouchableOpacity
-                key={day.id}
-                style={[styles.dayCard, isActive && styles.dayCardActive]}
-                onPress={() => toggleDay(day.id)}
-              >
-                <Text style={[styles.dayText, isActive && styles.dayTextActive]}>{day.label}</Text>
-                {isActive && <Text style={styles.check}>✓</Text>}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        <TouchableOpacity 
-          style={[styles.saveBtn, saving && styles.saveBtnDisabled]} 
-          onPress={handleSave} 
+        <TouchableOpacity
+          style={[styles.button, saving && styles.buttonDisabled]}
+          onPress={handleSave}
           disabled={saving}
+          activeOpacity={0.85}
         >
-          <Text style={styles.saveBtnText}>{saving ? 'SAVING...' : 'SAVE SCHEDULE'}</Text>
+          <LinearGradient
+            colors={['#d4ff00', '#ccff00', '#aadd00']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.btnGrad}
+          >
+            <Text style={styles.buttonText}>{saving ? 'SAVING...' : 'SAVE SCHEDULE'}</Text>
+          </LinearGradient>
         </TouchableOpacity>
-
+        
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
             Historical completed workouts will not be affected. Only future planned sessions will be rescheduled.
           </Text>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+
+      {/* ───── Footer ───── */}
+      <View style={styles.footer}>
+        <View style={styles.footerDivider} />
+
+        <Text style={styles.footerQuote}>
+          "Failing to plan is planning to fail."
+        </Text>
+        <Text style={styles.footerQuoteAttr}>— Alan Lakein</Text>
+
+        <View style={styles.footerPills}>
+          <View style={styles.pill}>
+            <Text style={styles.pillIcon}>🗓️</Text>
+            <Text style={styles.pillText}>Structured</Text>
+          </View>
+          <View style={styles.pill}>
+            <Text style={styles.pillIcon}>⚡</Text>
+            <Text style={styles.pillText}>Flexible</Text>
+          </View>
+        </View>
+      </View>
+    </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 },
-  backBtn: { padding: 8, marginLeft: -8 },
-  headerTitle: { color: theme.colors.text, fontSize: 16, fontWeight: 'bold' },
-  content: { padding: 24, paddingBottom: 60 },
-  iconContainer: { alignItems: 'center', marginBottom: 24 },
-  title: { color: theme.colors.text, fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
-  subtitle: { color: theme.colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 32, lineHeight: 20 },
-  grid: { gap: 12, marginBottom: 40 },
-  dayCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: theme.colors.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border },
-  dayCardActive: { backgroundColor: 'rgba(204,255,0,0.1)', borderColor: theme.colors.accent },
-  dayText: { color: theme.colors.textSecondary, fontSize: 16, fontWeight: '600' },
-  dayTextActive: { color: theme.colors.accent, fontWeight: 'bold' },
-  check: { color: theme.colors.accent, fontWeight: 'bold', fontSize: 16 },
-  saveBtn: { backgroundColor: theme.colors.accent, padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 24 },
-  saveBtnDisabled: { opacity: 0.7 },
-  saveBtnText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
-  infoBox: { backgroundColor: 'rgba(255,255,255,0.05)', padding: 16, borderRadius: 8 },
-  infoText: { color: theme.colors.textSecondary, fontSize: 12, textAlign: 'center', lineHeight: 18 }
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  scrollContent: { paddingBottom: 120 }, // Extra padding for bottom tabs
+
+  // Hero
+  heroSpace: { paddingHorizontal: 28, paddingTop: 10, paddingBottom: 32 },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 18 },
+  badgeText: { color: '#ccff00', fontWeight: '800', fontSize: 13, letterSpacing: 2.5 },
+  heroTitle: {
+    fontSize: 48, fontWeight: '900', color: '#FFFFFF', lineHeight: 52, marginBottom: 10,
+    textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8,
+  },
+  heroSub: { fontSize: 15, color: 'rgba(255,255,255,0.65)', lineHeight: 22 },
+
+  // Glass card
+  card: {
+    marginHorizontal: 16,
+    backgroundColor: 'rgba(22, 25, 33, 0.88)',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    padding: 24,
+    gap: 24,
+  },
+  section: { gap: 12 },
+  cardLabel: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+
+  // Days list
+  grid: { gap: 10 },
+  dayCard: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingVertical: 16,
+    paddingHorizontal: 18, 
+    backgroundColor: 'rgba(255,255,255,0.05)', 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: 'rgba(255,255,255,0.1)' 
+  },
+  dayCardActive: { backgroundColor: 'rgba(204,255,0,0.1)', borderColor: '#ccff00' },
+  dayText: { color: 'rgba(255,255,255,0.5)', fontSize: 15, fontWeight: '700', letterSpacing: 1 },
+  dayTextActive: { color: '#ccff00' },
+  
+  checkbox: { 
+    width: 22, height: 22, borderRadius: 6, 
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)', 
+    alignItems: 'center', justifyContent: 'center' 
+  },
+  checkboxActive: { borderColor: '#ccff00' },
+  checkboxInner: { width: 11, height: 11, borderRadius: 3, backgroundColor: '#ccff00' },
+
+  // Info Box
+  infoBox: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  infoText: { color: 'rgba(255,255,255,0.4)', fontSize: 12, textAlign: 'center', lineHeight: 18 },
+
+  // Button
+  button: { borderRadius: 14, overflow: 'hidden' },
+  buttonDisabled: { opacity: 0.7 },
+  btnGrad: { paddingVertical: 17, alignItems: 'center', justifyContent: 'center' },
+  buttonText: { color: '#000000', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
+
+  // Footer
+  footer: { marginHorizontal: 16, marginTop: 32, marginBottom: 20, alignItems: 'center', gap: 16 },
+  footerDivider: { width: '40%', height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: 4 },
+  footerQuote: {
+    color: 'rgba(255,255,255,0.75)', fontSize: 15, fontStyle: 'italic',
+    textAlign: 'center', lineHeight: 22, paddingHorizontal: 16,
+  },
+  footerQuoteAttr: { color: '#ccff00', fontSize: 12, fontWeight: '700', letterSpacing: 1, marginTop: -8 },
+  footerPills: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 },
+  pill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8,
+  },
+  pillIcon: { fontSize: 13 },
+  pillText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' },
 });

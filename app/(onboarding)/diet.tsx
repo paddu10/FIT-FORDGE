@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView,
-  KeyboardAvoidingView, Platform, ScrollView, Alert,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ScrollView, Alert, ImageBackground, Dimensions, StatusBar,
+  KeyboardAvoidingView, Platform
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 import { Utensils } from 'lucide-react-native';
-import { OnboardingFooter } from '../../components/OnboardingFooter';
+
+const { width, height } = Dimensions.get('window');
 
 const DIETS = [
-  { id: 'vegetarian',     title: 'Vegetarian' },
-  { id: 'eggetarian',     title: 'Eggetarian' },
-  { id: 'non_vegetarian', title: 'Non-vegetarian' },
+  { id: 'vegetarian',     title: 'Vegetarian',      emoji: '🥗' },
+  { id: 'eggetarian',     title: 'Eggetarian',      emoji: '🍳' },
+  { id: 'non_vegetarian', title: 'Non-vegetarian',  emoji: '🥩' },
 ];
 
 export default function DietScreen() {
@@ -23,11 +26,14 @@ export default function DietScreen() {
   const [allergies, setAllergies] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Pre-populate from saved profile
   useEffect(() => {
     async function loadSaved() {
       if (!user) return;
-      const { data } = await supabase.from('profiles').select('diet_preference, allergies').eq('id', user.id).single();
+      const { data } = await supabase
+        .from('profiles')
+        .select('diet_preference, allergies')
+        .eq('id', user.id)
+        .single();
       if (data?.diet_preference) setDiet(data.diet_preference);
       if (data?.allergies) setAllergies(data.allergies);
     }
@@ -65,77 +71,223 @@ export default function DietScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <Utensils size={32} color="#ccff00" />
-            <Text style={styles.title}>What's your diet?</Text>
-            <Text style={styles.subtitle}>We'll personalize your daily meal plan.</Text>
-          </View>
+    <View style={styles.root}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-          <View style={styles.form}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Diet Preference</Text>
-              <View style={styles.list}>
-                {DIETS.map((d) => (
-                  <TouchableOpacity
-                    key={d.id}
-                    style={[styles.dietButton, diet === d.id && styles.activeButton]}
-                    onPress={() => setDiet(d.id)}
-                  >
-                    <Text style={[styles.dietLabel, diet === d.id && styles.activeLabel]}>{d.title}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
+      <ImageBackground
+        source={require('../../assets/Dietplan_img.jpg')}
+        style={styles.bgImage}
+        resizeMode="cover"
+      >
+        <LinearGradient
+          colors={['rgba(0,0,0,0.15)', 'rgba(8,9,12,0.70)', 'rgba(8,9,12,0.97)']}
+          locations={[0, 0.42, 0.72]}
+          style={StyleSheet.absoluteFill}
+        />
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Food Allergies & Restrictions (Optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="E.g. Peanuts, lactose intolerance..."
-                placeholderTextColor="#64748B"
-                value={allergies}
-                onChangeText={setAllergies}
-                multiline
-                numberOfLines={3}
-              />
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleNext}
-            disabled={loading}
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          style={styles.kavFlex}
+        >
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
-            <Text style={styles.buttonText}>{loading ? 'SAVING...' : 'NEXT ➔'}</Text>
-          </TouchableOpacity>
+            {/* Hero */}
+            <View style={styles.heroSpace}>
+              <View style={styles.badgeRow}>
+                <Utensils size={18} color="#ccff00" />
+                <Text style={styles.badgeText}>FIT FORGE</Text>
+              </View>
+              <Text style={styles.heroTitle}>What's Your{'\n'}Diet?</Text>
+              <Text style={styles.heroSub}>We'll personalize your daily meal plan to match.</Text>
+            </View>
 
-          <OnboardingFooter />
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+            {/* Glass card */}
+            <View style={styles.card}>
+
+              <View style={styles.section}>
+                <Text style={styles.cardLabel}>DIET PREFERENCE</Text>
+                <View style={styles.list}>
+                  {DIETS.map((d) => {
+                    const isSelected = diet === d.id;
+                    return (
+                      <TouchableOpacity
+                        key={d.id}
+                        style={[styles.dietButton, isSelected && styles.activeButton]}
+                        onPress={() => setDiet(d.id)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.dietEmoji}>{d.emoji}</Text>
+                        <Text style={[styles.dietLabel, isSelected && styles.activeLabel]}>{d.title}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.section}>
+                <Text style={styles.cardLabel}>FOOD ALLERGIES & RESTRICTIONS</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="E.g. Peanuts, lactose intolerance..."
+                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  value={allergies}
+                  onChangeText={setAllergies}
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleNext}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={['#d4ff00', '#ccff00', '#aadd00']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.btnGrad}
+                >
+                  <Text style={styles.buttonText}>{loading ? 'SAVING...' : 'NEXT ➔'}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+
+            {/* ───── Footer ───── */}
+            <View style={styles.footer}>
+              <View style={styles.footerDivider} />
+
+              <Text style={styles.footerQuote}>
+                "You can't out-train a bad diet."
+              </Text>
+              <Text style={styles.footerQuoteAttr}>— Unknown</Text>
+
+              <View style={styles.footerPills}>
+                <View style={styles.pill}>
+                  <Text style={styles.pillIcon}>🍎</Text>
+                  <Text style={styles.pillText}>Nutritious</Text>
+                </View>
+                <View style={styles.pill}>
+                  <Text style={styles.pillIcon}>📊</Text>
+                  <Text style={styles.pillText}>Macro-Focused</Text>
+                </View>
+                <View style={styles.pill}>
+                  <Text style={styles.pillIcon}>⚡</Text>
+                  <Text style={styles.pillText}>Fueling</Text>
+                </View>
+              </View>
+
+              <Text style={styles.footerAbout}>
+                Nutrition is 80% of the battle. FIT FORGE builds meals that match your
+                dietary needs and fuel your performance.
+              </Text>
+
+              <Text style={styles.footerCopy}>© 2025 FIT FORGE. All rights reserved.</Text>
+            </View>
+
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#08090C' },
-  keyboardView: { flex: 1 },
-  scrollContent: { flexGrow: 1, padding: 24, justifyContent: 'center' },
-  header: { alignItems: 'center', marginBottom: 40 },
-  title: { fontSize: 28, fontWeight: '900', color: '#FFFFFF', marginTop: 16, textAlign: 'center' },
-  subtitle: { fontSize: 15, color: '#9CA3AF', marginTop: 8, textAlign: 'center', lineHeight: 22 },
-  form: { gap: 24, backgroundColor: '#161921', padding: 24, borderRadius: 16, borderWidth: 1, borderColor: '#2D3748', marginBottom: 32 },
-  inputGroup: { gap: 12 },
-  label: { color: '#9CA3AF', fontSize: 14, fontWeight: '600' },
-  list: { gap: 8 },
-  dietButton: { backgroundColor: '#0F1115', borderWidth: 1, borderColor: '#1E2430', paddingVertical: 16, borderRadius: 8, alignItems: 'center' },
-  dietLabel: { color: '#64748B', fontSize: 16, fontWeight: '600' },
+  root: { flex: 1, backgroundColor: '#08090C' },
+  bgImage: { width, height, flex: 1 },
+  kavFlex: { flex: 1 },
+  scrollContent: { flexGrow: 1, justifyContent: 'flex-end', paddingBottom: 32 },
+
+  // Hero
+  heroSpace: { paddingHorizontal: 28, paddingTop: 80, paddingBottom: 32 },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 18 },
+  badgeText: { color: '#ccff00', fontWeight: '800', fontSize: 13, letterSpacing: 2.5 },
+  heroTitle: {
+    fontSize: 48, fontWeight: '900', color: '#FFFFFF', lineHeight: 52, marginBottom: 10,
+    textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8,
+  },
+  heroSub: { fontSize: 15, color: 'rgba(255,255,255,0.65)', lineHeight: 22 },
+
+  // Glass card
+  card: {
+    marginHorizontal: 16,
+    backgroundColor: 'rgba(22, 25, 33, 0.88)',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    padding: 24,
+    gap: 24,
+  },
+  section: { gap: 12 },
+  cardLabel: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
+
+  // Diet List
+  list: { gap: 10 },
+  dietButton: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)', 
+    borderWidth: 1, 
+    borderColor: 'rgba(255,255,255,0.1)', 
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
+  dietEmoji: { fontSize: 20 },
+  dietLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 16, fontWeight: '600' },
   activeButton: { backgroundColor: 'rgba(204,255,0,0.1)', borderColor: '#ccff00' },
   activeLabel: { color: '#ccff00', fontWeight: 'bold' },
-  input: { backgroundColor: '#0F1115', borderRadius: 8, borderWidth: 1, borderColor: '#1E2430', color: '#FFFFFF', paddingVertical: 14, paddingHorizontal: 16, fontSize: 16, minHeight: 100, textAlignVertical: 'top' },
-  button: { backgroundColor: '#ccff00', padding: 16, borderRadius: 8, alignItems: 'center', marginBottom: 8 },
+
+  // Text Input
+  input: { 
+    backgroundColor: 'rgba(255,255,255,0.05)', 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: 'rgba(255,255,255,0.1)', 
+    color: '#FFFFFF', 
+    paddingVertical: 14, 
+    paddingHorizontal: 16, 
+    fontSize: 15, 
+    minHeight: 100, 
+    textAlignVertical: 'top' 
+  },
+
+  // Button
+  button: { borderRadius: 14, overflow: 'hidden' },
   buttonDisabled: { opacity: 0.7 },
-  buttonText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  btnGrad: { paddingVertical: 17, alignItems: 'center', justifyContent: 'center' },
+  buttonText: { color: '#000000', fontSize: 16, fontWeight: '900', letterSpacing: 1 },
+
+  // Footer
+  footer: { marginHorizontal: 16, marginTop: 28, marginBottom: 40, alignItems: 'center', gap: 16 },
+  footerDivider: { width: '40%', height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: 4 },
+  footerQuote: {
+    color: 'rgba(255,255,255,0.75)', fontSize: 15, fontStyle: 'italic',
+    textAlign: 'center', lineHeight: 22, paddingHorizontal: 16,
+  },
+  footerQuoteAttr: { color: '#ccff00', fontSize: 12, fontWeight: '700', letterSpacing: 1, marginTop: -8 },
+  footerPills: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 },
+  pill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8,
+  },
+  pillIcon: { fontSize: 13 },
+  pillText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' },
+  footerAbout: {
+    color: 'rgba(255,255,255,0.38)', fontSize: 12,
+    textAlign: 'center', lineHeight: 19, paddingHorizontal: 8,
+  },
+  footerCopy: { color: 'rgba(255,255,255,0.2)', fontSize: 11, letterSpacing: 0.5, marginTop: 4 },
 });

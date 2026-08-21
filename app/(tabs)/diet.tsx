@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, ImageBackground } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { generateDailyDiet } from '../../lib/DietEngine';
 import { CheckCircle2, Circle, Flame, Droplets, Utensils } from 'lucide-react-native';
+import { AppScreen } from '../../components/AppScreen';
+import { AppHeader } from '../../components/AppHeader';
+import { SPACING } from '../../constants/Layout';
+import { useRouter } from 'expo-router';
 
 export default function DietScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
   const [meals, setMeals] = useState<any[]>([]);
@@ -70,7 +74,6 @@ export default function DietScreen() {
         setMeals(updatedMeals);
         calculateTotals(updatedMeals);
         
-        // Also update task status if all meals eaten
         if (newStatus === 'eaten') {
           const allEaten = updatedMeals.every(m => m.status === 'eaten');
           if (allEaten) {
@@ -91,9 +94,11 @@ export default function DietScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator size="large" color="#ccff00" />
-      </SafeAreaView>
+      <AppScreen bgImage={require('../../assets/Dietplan_img.jpg')} bgGradient hideBottomSafe>
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color="#ccff00" />
+        </View>
+      </AppScreen>
     );
   }
 
@@ -104,149 +109,113 @@ export default function DietScreen() {
   const remainingProtein = Math.max(0, targetProtein - consumedProtein);
 
   return (
-    <ImageBackground 
-      source={require('../../assets/Dietplan_img.jpg')}
-      style={styles.bgWrapper}
-      imageStyle={styles.bgImage}
-      resizeMode="cover"
+    <AppScreen 
+      bgImage={require('../../assets/Dietplan_img.jpg')} 
+      bgGradient 
+      hideBottomSafe
+      scrollable
+      contentContainerStyle={styles.scrollContent}
     >
-      <LinearGradient
-        colors={['rgba(8,9,12,0.4)', 'rgba(8,9,12,0.8)', 'rgba(8,9,12,1)']}
-        style={StyleSheet.absoluteFillObject}
-      />
-      <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <AppHeader title="Diet Plan" subtitle="Fuel your body" showBack={router.canGoBack()} />
+
+      <View style={styles.progressContainer}>
+        <View style={styles.progressCard}>
+          <Flame size={24} color="#F59E0B" style={{marginBottom: 8}} />
+          <Text style={styles.progressValue}>{remainingCals}</Text>
+          <Text style={styles.progressLabel}>CALS LEFT</Text>
+          <Text style={styles.progressSubtext}>{consumedCalories} / {targetCals}</Text>
+        </View>
+        <View style={styles.progressCard}>
+          <Droplets size={24} color="#6C63FF" style={{marginBottom: 8}} />
+          <Text style={styles.progressValue}>{remainingProtein}g</Text>
+          <Text style={styles.progressLabel}>PROTEIN LEFT</Text>
+          <Text style={styles.progressSubtext}>{consumedProtein}g / {targetProtein}g</Text>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>TODAY'S MEALS</Text>
         
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Diet Plan</Text>
-          <Text style={styles.headerSubtitle}>Fuel your body</Text>
-        </View>
-
-        <View style={styles.progressContainer}>
-          <View style={styles.progressCard}>
-            <Flame size={24} color="#F59E0B" style={{marginBottom: 8}} />
-            <Text style={styles.progressValue}>{remainingCals}</Text>
-            <Text style={styles.progressLabel}>CALS LEFT</Text>
-            <Text style={styles.progressSubtext}>{consumedCalories} / {targetCals}</Text>
+        {meals.length === 0 && (
+          <View style={{ padding: 20, alignItems: 'center' }}>
+            <Text style={{ color: '#9CA3AF', textAlign: 'center' }}>We couldn't find enough foods matching your diet preference. Please check your food_items database.</Text>
           </View>
-          <View style={styles.progressCard}>
-            <Droplets size={24} color="#6C63FF" style={{marginBottom: 8}} />
-            <Text style={styles.progressValue}>{remainingProtein}g</Text>
-            <Text style={styles.progressLabel}>PROTEIN LEFT</Text>
-            <Text style={styles.progressSubtext}>{consumedProtein}g / {targetProtein}g</Text>
-          </View>
-        </View>
+        )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>TODAY'S MEALS</Text>
-          
-          {meals.length === 0 && (
-            <View style={{ padding: 20, alignItems: 'center' }}>
-              <Text style={{ color: '#9CA3AF', textAlign: 'center' }}>We couldn't find enough foods matching your diet preference. Please check your food_items database.</Text>
-            </View>
-          )}
-
-          {meals.map(plan => {
-            const food = plan.food_items;
-            if (!food) return null;
-            return (
-              <View key={plan.id} style={styles.mealCard}>
-                <View style={styles.mealHeader}>
-                  <View style={{flex: 1}}>
-                    <Text style={styles.mealType}>{plan.meal_type.toUpperCase()}</Text>
-                    <Text style={styles.mealName}>{food.food_name || 'Meal'}</Text>
-                    <Text style={{ color: '#64748B', fontSize: 12, marginTop: 4 }}>
-                      {plan.quantity} {plan.unit} • {food.serving_size || '1 serving'}
-                    </Text>
-                  </View>
-                  <TouchableOpacity onPress={() => toggleMeal(plan.id, plan.status)}>
-                    {plan.status === 'eaten' ? (
-                      <CheckCircle2 size={32} color="#22C55E" />
-                    ) : (
-                      <Circle size={32} color="#4B5563" />
-                    )}
-                  </TouchableOpacity>
+        {meals.map(plan => {
+          const food = plan.food_items;
+          if (!food) return null;
+          return (
+            <View key={plan.id} style={styles.mealCard}>
+              <View style={styles.mealHeader}>
+                <View style={{flex: 1}}>
+                  <Text style={styles.mealType}>{plan.meal_type.toUpperCase()}</Text>
+                  <Text style={styles.mealName}>{food.food_name || 'Meal'}</Text>
+                  <Text style={styles.mealQtyText}>
+                    {plan.quantity} {plan.unit} • {food.serving_size || '1 serving'}
+                  </Text>
                 </View>
-                
-                <View style={styles.mealStats}>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>CALORIES</Text>
-                    <Text style={styles.statValue}>{Math.round((food.calories || 0) * plan.quantity)}</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>PROTEIN</Text>
-                    <Text style={styles.statValue}>{Math.round((food.protein || 0) * plan.quantity)}g</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>CARBS</Text>
-                    <Text style={styles.statValue}>{Math.round((food.carbs || 0) * plan.quantity)}g</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>FAT</Text>
-                    <Text style={styles.statValue}>{Math.round((food.fat || 0) * plan.quantity)}g</Text>
-                  </View>
+                <TouchableOpacity onPress={() => toggleMeal(plan.id, plan.status)}>
+                  {plan.status === 'eaten' ? (
+                    <CheckCircle2 size={32} color="#22C55E" />
+                  ) : (
+                    <Circle size={32} color="#4B5563" />
+                  )}
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.mealStats}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statLabel}>CALORIES</Text>
+                  <Text style={styles.statValue}>{Math.round((food.calories || 0) * plan.quantity)}</Text>
                 </View>
-                
-                <View style={styles.mealDetails}>
-                  {food.description ? (
-                    <Text style={[styles.detailText, {marginBottom: 8}]}>{food.description}</Text>
-                  ) : null}
-                  <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 6}}>
-                    <Utensils size={14} color="#9CA3AF" />
-                    <Text style={styles.detailTitle}> BENEFITS</Text>
-                  </View>
-                  <Text style={styles.detailText}>{food.health_benefits || 'Good for your health and performance.'}</Text>
+                <View style={styles.statItem}>
+                  <Text style={styles.statLabel}>PROTEIN</Text>
+                  <Text style={styles.statValue}>{Math.round((food.protein || 0) * plan.quantity)}g</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statLabel}>CARBS</Text>
+                  <Text style={styles.statValue}>{Math.round((food.carbs || 0) * plan.quantity)}g</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statLabel}>FAT</Text>
+                  <Text style={styles.statValue}>{Math.round((food.fat || 0) * plan.quantity)}g</Text>
                 </View>
               </View>
-            );
-          })}
-          
-        </View>
-        <View style={{height: 100}} />
-      </ScrollView>
-      </SafeAreaView>
-    </ImageBackground>
+              
+              <View style={styles.mealDetails}>
+                {food.description ? (
+                  <Text style={[styles.detailText, {marginBottom: 8}]}>{food.description}</Text>
+                ) : null}
+                <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 6}}>
+                  <Utensils size={14} color="#9CA3AF" />
+                  <Text style={styles.detailTitle}> BENEFITS</Text>
+                </View>
+                <Text style={styles.detailText}>{food.health_benefits || 'Good for your health and performance.'}</Text>
+              </View>
+            </View>
+          );
+        })}
+        
+      </View>
+    </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  bgWrapper: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  bgImage: {
-    opacity: 0.65,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
   centerContent: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   scrollContent: {
-    padding: 20,
-  },
-  header: {
-    marginBottom: 24,
-    marginTop: 8,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#FFFFFF',
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#ccff00',
-    marginTop: 4,
-    fontWeight: '600',
+    paddingHorizontal: SPACING.screenHorizontal,
+    paddingBottom: 120,
   },
   progressContainer: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 32,
+    marginBottom: SPACING.section,
   },
   progressCard: {
     flex: 1,
@@ -275,7 +244,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: SPACING.section,
   },
   sectionTitle: {
     color: '#9CA3AF',
@@ -291,7 +260,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: '#2D3748',
-    marginBottom: 16,
+    marginBottom: SPACING.card,
   },
   mealHeader: {
     flexDirection: 'row',
@@ -310,6 +279,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  mealQtyText: {
+    color: '#64748B',
+    fontSize: 12,
+    marginTop: 4,
   },
   mealStats: {
     flexDirection: 'row',
