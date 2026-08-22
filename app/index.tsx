@@ -10,7 +10,6 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 import { Dumbbell } from 'lucide-react-native';
-
 export default function SplashScreen() {
   const router = useRouter();
   const translateY = useSharedValue(0);
@@ -35,7 +34,7 @@ export default function SplashScreen() {
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
-      transform: [{ translateY: translateY.value }],
+      transform: [{ translateY: translateY.value }] as any,
     };
   });
 
@@ -71,4 +70,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#9CA3AF',
   },
+  logoImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  }
 });
