@@ -28,7 +28,7 @@ export function WorkoutHero({
   return (
     <View style={[styles.container, style]}>
       <ImageBackground 
-        source={require('../assets/fitness_bg.png')} 
+        source={require('../assets/fitness_bg.jpg')} 
         style={styles.bgImage}
         imageStyle={{ opacity: 0.15 }}
       >

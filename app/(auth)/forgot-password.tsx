@@ -43,7 +43,7 @@ export default function ForgotPasswordScreen() {
 
   return (
     <ImageBackground
-      source={require('../../assets/fitness_bg.png')}
+      source={require('../../assets/fitness_bg.jpg')}
       style={styles.backgroundImage}
     >
       <View style={styles.overlay}>

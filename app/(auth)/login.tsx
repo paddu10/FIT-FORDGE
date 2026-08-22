@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { Dumbbell, Mail, Lock, CheckSquare, Square } from 'lucide-react-native';
 import { PremiumButton } from '../../components/PremiumButton';
 import { AppScreen } from '../../components/AppScreen';
+import { OnboardingFooter } from '../../components/OnboardingFooter';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -34,7 +35,7 @@ export default function LoginScreen() {
 
   return (
     <AppScreen
-      bgImage={require('../../assets/fitness_bg.png')}
+      bgImage={require('../../assets/Login_page_img.jpg')}
       bgGradient
       scrollable
       contentContainerStyle={styles.scrollContent}
@@ -138,6 +139,7 @@ export default function LoginScreen() {
           </View>
         </View>
       </View>
+      <OnboardingFooter />
     </AppScreen>
   );
 }

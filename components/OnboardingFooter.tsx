@@ -1,15 +1,28 @@
 import { View, Text, StyleSheet } from 'react-native';
+
 export function OnboardingFooter() {
   return (
     <View style={styles.footer}>
-      {/* Divider */}
-      <View style={styles.divider} />
+      <View style={styles.footerDivider} />
 
-      {/* Brand line */}
-      <Text style={styles.brand}>⚡ FIT FORGE</Text>
-      <Text style={styles.tagline}>Your body. Your plan. Your results.</Text>
+      <Text style={styles.footerQuote}>
+        "Discipline is the bridge between goals and accomplishment."
+      </Text>
+      <Text style={styles.footerQuoteAttr}>— Jim Rohn</Text>
 
-      <Text style={styles.copy}>© 2025 FIT FORGE. All rights reserved.</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 16 }}>
+        <View style={styles.pill}>
+          <Text style={styles.pillIcon}>🔒</Text>
+          <Text style={styles.pillText}>Secure Data</Text>
+        </View>
+        <View style={styles.pill}>
+          <Text style={styles.pillIcon}>⚡</Text>
+          <Text style={styles.pillText}>Fast Sync</Text>
+        </View>
+      </View>
+      <View style={{ height: 24 }} />
+      <Text style={styles.footerAbout}>FitForge uses your biometrics to craft a scientifically-backed plan. Your data is private.</Text>
+      <Text style={[styles.footerAbout, styles.footerCopy]}>© 2025 FIT FORGE. All rights reserved.</Text>
     </View>
   );
 }
@@ -19,28 +32,60 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 28,
     paddingBottom: 32,
+    marginHorizontal: 16,
     gap: 8,
   },
-  divider: {
-    width: 48,
+  footerDivider: {
+    width: '40%',
     height: 1,
-    backgroundColor: '#1E2430',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     marginBottom: 12,
   },
-  brand: {
-    color: '#ccff00',
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 2,
+  footerQuote: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 15,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 16,
   },
-  tagline: {
-    color: '#4B5563',
+  footerQuoteAttr: {
+    color: '#ccff00',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginTop: 4,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  pillIcon: {
+    fontSize: 13,
+  },
+  pillText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  footerAbout: {
+    color: 'rgba(255,255,255,0.38)',
     fontSize: 12,
     textAlign: 'center',
+    lineHeight: 19,
+    paddingHorizontal: 8,
   },
-  copy: {
-    color: '#1F2937',
+  footerCopy: {
+    color: 'rgba(255,255,255,0.2)',
     fontSize: 11,
-    marginTop: 4,
+    letterSpacing: 0.5,
+    marginTop: 8,
   },
 });

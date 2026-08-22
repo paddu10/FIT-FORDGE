@@ -1,28 +1,34 @@
 {
-    "expo":  {
-                 "name":  "gym-app",
-                 "slug":  "gym-app",
-                 "scheme": "fitforge",
-                 "version":  "1.0.0",
-                 "orientation":  "portrait",
-                 "icon":  "./assets/icon.png",
-                 "userInterfaceStyle":  "light",
-                 "ios":  {
-                             "supportsTablet":  true
-                         },
-                 "android":  {
-                                 "adaptiveIcon":  {
-                                                      "backgroundColor":  "#E6F4FE",
-                                                      "foregroundImage":  "./assets/android-icon-foreground.png",
-                                                      "backgroundImage":  "./assets/android-icon-background.png",
-                                                      "monochromeImage":  "./assets/android-icon-monochrome.png"
-                                                  }
-                             },
-                 "web":  {
-                             "favicon":  "./assets/favicon.png"
-                         },
-                 "plugins":  [
-                                 "expo-router"
-                             ]
-             }
+  "expo": {
+    "name": "gym-app",
+    "slug": "gym-app",
+    "scheme": "fitforge",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fitforge.app"
+    },
+    "android": {
+      "package": "com.fitforge.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#08090C",
+        "foregroundImage": "./assets/icon.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "409ae8b0-755e-490c-ac39-fdabb0fcbf59"
+      }
+    }
+  }
 }

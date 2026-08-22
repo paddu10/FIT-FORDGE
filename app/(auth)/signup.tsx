@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Link } from 'expo-router';
 import { supabase } from '../../lib/supabase';
-import { Dumbbell, User, Mail, Phone, Lock } from 'lucide-react-native';
+import { AlertTriangle, CheckCircle2, Dumbbell, Mail, Lock, User, Phone } from 'lucide-react-native';
 import { AppScreen } from '../../components/AppScreen';
+import { OnboardingFooter } from '../../components/OnboardingFooter';
 
 export default function SignupScreen() {
   const [fullName, setFullName] = useState('');
@@ -48,7 +49,7 @@ export default function SignupScreen() {
 
   return (
     <AppScreen
-      bgImage={require('../../assets/fitness_bg.png')}
+      bgImage={require('../../assets/singup_img.jpg')}
       bgGradient
       scrollable
       contentContainerStyle={styles.scrollContent}
@@ -164,6 +165,7 @@ export default function SignupScreen() {
           </View>
         </View>
       </View>
+      <OnboardingFooter />
     </AppScreen>
   );
 }
